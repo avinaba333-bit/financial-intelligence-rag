@@ -1,0 +1,10 @@
+streamlit
+boto3
+python-dotenv
+pymupdf
+pypdf
+pandas
+numpy
+plotly
+pydantic
+pytest
