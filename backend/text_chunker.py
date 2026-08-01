@@ -1,20 +1,31 @@
-from typing import List, Dict
+from typing import Any
 
 
 def chunk_document(
-    pages: List[Dict],
-    chunk_size: int = 800,
-    overlap: int = 100,
-):
+    pages: list[dict[str, Any]],
+    chunk_size: int = 1000,
+    overlap: int = 200,
+) -> list[dict[str, Any]]:
     """
-    Split page text into overlapping chunks.
+    Split page-wise financial-report text into overlapping chunks.
+
+    Each chunk retains its source page and filename.
     """
 
-    chunks = []
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be greater than zero.")
+
+    if overlap < 0:
+        raise ValueError("overlap cannot be negative.")
+
+    if overlap >= chunk_size:
+        raise ValueError("overlap must be smaller than chunk_size.")
+
+    chunks: list[dict[str, Any]] = []
+    chunk_id = 1
 
     for page in pages:
-
-        text = page["text"].strip()
+        text = page.get("text", "").strip()
 
         if not text:
             continue
@@ -22,19 +33,28 @@ def chunk_document(
         start = 0
 
         while start < len(text):
+            end = min(start + chunk_size, len(text))
+            chunk_text = text[start:end].strip()
 
-            end = start + chunk_size
+            if chunk_text:
+                chunks.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "page_number": page.get("page_number"),
+                        "source_file": page.get(
+                            "source_file",
+                            "unknown.pdf",
+                        ),
+                        "text": chunk_text,
+                        "character_count": len(chunk_text),
+                    }
+                )
 
-            chunk = text[start:end]
+                chunk_id += 1
 
-            chunks.append(
-                {
-                    "page_number": page["page_number"],
-                    "text": chunk,
-                    "source_file": page["source_file"],
-                }
-            )
+            if end >= len(text):
+                break
 
-            start += chunk_size - overlap
+            start = end - overlap
 
     return chunks
