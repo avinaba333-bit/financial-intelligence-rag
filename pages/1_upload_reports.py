@@ -5,6 +5,8 @@ from pathlib import Path
 import streamlit as st
 
 from backend.pdf_processor import extract_pdf_pages
+from backend.storage_service import S3Storage, StorageError
+from config import AWS_REGION, S3_BUCKET, S3_ENABLED, S3_PREFIX
 
 
 st.set_page_config(
@@ -17,8 +19,8 @@ st.title("Upload Financial Reports")
 
 st.write(
     """
-    Upload annual reports for local PDF processing.
-    Extracted text will be stored page by page for later RAG processing.
+    Upload annual reports for PDF processing. Files are always retained locally
+    and can also be stored in Amazon S3 for cloud-based RAG processing.
     """
 )
 
@@ -47,6 +49,16 @@ uploaded_files = st.file_uploader(
     type=["pdf"],
     accept_multiple_files=True,
 )
+
+use_s3 = st.checkbox(
+    "Store original PDF and processed JSON in Amazon S3",
+    value=S3_ENABLED and bool(S3_BUCKET),
+    disabled=not bool(S3_BUCKET),
+    help="Set S3_BUCKET in .env to enable cloud storage.",
+)
+
+if not S3_BUCKET:
+    st.info("S3 is optional. Configure S3_BUCKET to enable cloud storage.")
 
 if uploaded_files:
     st.subheader("Selected Reports")
@@ -100,8 +112,10 @@ if st.button("Upload and Process", type="primary"):
         for uploaded_file in uploaded_files:
             local_pdf_path = raw_directory / uploaded_file.name
 
+            file_bytes = uploaded_file.getvalue()
+
             with open(local_pdf_path, "wb") as output_file:
-                output_file.write(uploaded_file.getbuffer())
+                output_file.write(file_bytes)
 
             try:
                 pages = extract_pdf_pages(
@@ -118,8 +132,25 @@ if st.button("Upload and Process", type="primary"):
                     "financial_year": financial_year.strip(),
                     "source_file": uploaded_file.name,
                     "total_pages": len(pages),
+                    "storage": {"local_pdf": str(local_pdf_path)},
                     "pages": pages,
                 }
+
+                if use_s3:
+                    storage = S3Storage(S3_BUCKET, AWS_REGION, S3_PREFIX)
+                    raw_key = storage.raw_key(company_folder, year_folder, uploaded_file.name)
+                    processed_key = storage.processed_key(
+                        company_folder, year_folder, uploaded_file.name
+                    )
+                    processed_data["storage"].update(
+                        {
+                            "s3_bucket": S3_BUCKET,
+                            "raw_s3_key": raw_key,
+                            "processed_s3_key": processed_key,
+                        }
+                    )
+                    storage.upload_bytes(file_bytes, raw_key, "application/pdf")
+                    storage.upload_json(processed_data, processed_key)
 
                 with open(
                     processed_file,
@@ -149,6 +180,9 @@ if st.button("Upload and Process", type="primary"):
                     f"Pages containing text: **{pages_with_text}**"
                 )
 
+                if use_s3:
+                    st.write(f"S3 processed object: `{processed_key}`")
+
                 with st.expander(
                     f"Preview extracted text: {uploaded_file.name}"
                 ):
@@ -168,7 +202,7 @@ if st.button("Upload and Process", type="primary"):
                                 "No readable text detected on this page."
                             )
 
-            except Exception as error:
+            except (OSError, ValueError, StorageError) as error:
                 st.error(
                     f"Failed to process {uploaded_file.name}: "
                     f"{error}"

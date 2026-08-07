@@ -3,7 +3,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from backend.chunk_service import generate_and_save_chunks
+from backend.chunk_service import (
+    generate_and_save_chunks,
+    generate_chunk_payload,
+    save_chunk_payload,
+)
+from backend.storage_service import S3Storage, StorageError
+from config import AWS_REGION, S3_BUCKET, S3_PREFIX
 
 
 st.set_page_config(
@@ -27,17 +33,32 @@ processed_files = sorted(
     processed_directory.rglob("*.json")
 )
 
-if not processed_files:
+document_options = [
+    {"kind": "local", "value": path, "label": f"Local: {path}"}
+    for path in processed_files
+]
+
+if S3_BUCKET:
+    try:
+        storage = S3Storage(S3_BUCKET, AWS_REGION, S3_PREFIX)
+        document_options.extend(
+            {"kind": "s3", "value": item.key, "label": item.label}
+            for item in storage.list_processed_documents()
+        )
+    except StorageError as error:
+        st.warning(f"S3 documents are temporarily unavailable: {error}")
+
+if not document_options:
     st.warning(
         "No processed JSON files were found. "
         "Upload and process a PDF first."
     )
     st.stop()
 
-selected_file = st.selectbox(
+selected_option = st.selectbox(
     "Select processed financial report",
-    options=processed_files,
-    format_func=lambda path: str(path),
+    options=document_options,
+    format_func=lambda option: option["label"],
 )
 
 col1, col2 = st.columns(2)
@@ -71,11 +92,26 @@ if st.button(
     type="primary",
 ):
     try:
-        output_path, chunks = generate_and_save_chunks(
-            processed_json_path=selected_file,
-            chunk_size=int(chunk_size),
-            overlap=int(overlap),
-        )
+        if selected_option["kind"] == "local":
+            output_path, chunks = generate_and_save_chunks(
+                processed_json_path=selected_option["value"],
+                chunk_size=int(chunk_size),
+                overlap=int(overlap),
+            )
+        else:
+            document = storage.download_json(selected_option["value"])
+            payload, chunks = generate_chunk_payload(
+                document, int(chunk_size), int(overlap)
+            )
+            company = selected_option["value"].split("/")[-4]
+            year = selected_option["value"].split("/")[-3]
+            output_path = (
+                Path("data/chunks") / company / year /
+                f"{Path(document['source_file']).stem}_chunks.json"
+            )
+            save_chunk_payload(payload, output_path)
+            chunk_key = storage.chunks_key(company, year, document["source_file"])
+            storage.upload_json(payload, chunk_key)
 
         st.session_state["chunk_output_path"] = str(
             output_path
@@ -89,7 +125,7 @@ if st.button(
             f"Chunk file saved at: `{output_path}`"
         )
 
-    except Exception as error:
+    except (OSError, ValueError, StorageError) as error:
         st.exception(error)
 
 chunk_output_path = st.session_state.get(

@@ -29,6 +29,21 @@ def generate_and_save_chunks(
         processed_json_path
     )
 
+    output_data, chunks = generate_chunk_payload(document, chunk_size, overlap)
+
+    relative_path = processed_json_path.relative_to(Path("data/processed"))
+    output_directory = Path("data/chunks") / relative_path.parent
+    output_directory.mkdir(parents=True, exist_ok=True)
+    output_path = output_directory / f"{processed_json_path.stem}_chunks.json"
+    save_chunk_payload(output_data, output_path)
+    return output_path, chunks
+
+
+def generate_chunk_payload(
+    document: dict[str, Any],
+    chunk_size: int = 1000,
+    overlap: int = 200,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     pages = document.get("pages", [])
 
     if not pages:
@@ -42,25 +57,6 @@ def generate_and_save_chunks(
         overlap=overlap,
     )
 
-    relative_path = processed_json_path.relative_to(
-        Path("data/processed")
-    )
-
-    output_directory = (
-        Path("data/chunks")
-        / relative_path.parent
-    )
-
-    output_directory.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    output_path = (
-        output_directory
-        / f"{processed_json_path.stem}_chunks.json"
-    )
-
     output_data = {
         "company": document.get("company"),
         "financial_year": document.get("financial_year"),
@@ -71,15 +67,10 @@ def generate_and_save_chunks(
         "chunks": chunks,
     }
 
-    with output_path.open(
-        "w",
-        encoding="utf-8",
-    ) as output_file:
-        json.dump(
-            output_data,
-            output_file,
-            ensure_ascii=False,
-            indent=2,
-        )
+    return output_data, chunks
 
-    return output_path, chunks
+
+def save_chunk_payload(payload: dict[str, Any], output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as output_file:
+        json.dump(payload, output_file, ensure_ascii=False, indent=2)

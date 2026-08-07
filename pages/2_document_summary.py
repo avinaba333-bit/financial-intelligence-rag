@@ -3,6 +3,9 @@ from pathlib import Path
 
 import streamlit as st
 
+from backend.storage_service import S3Storage, StorageError
+from config import AWS_REGION, S3_BUCKET, S3_PREFIX
+
 
 st.set_page_config(
     page_title="Document Summary",
@@ -15,28 +18,42 @@ st.title("Processed Financial Documents")
 processed_directory = Path("data/processed")
 
 json_files = sorted(processed_directory.rglob("*.json"))
+document_options = [
+    {"kind": "local", "value": path, "label": f"Local: {path}"}
+    for path in json_files
+]
 
-if not json_files:
+if S3_BUCKET:
+    try:
+        storage = S3Storage(S3_BUCKET, AWS_REGION, S3_PREFIX)
+        document_options.extend(
+            {"kind": "s3", "value": item.key, "label": item.label}
+            for item in storage.list_processed_documents()
+        )
+    except StorageError as error:
+        st.warning(f"S3 documents are temporarily unavailable: {error}")
+
+if not document_options:
     st.info(
         "No processed documents found. "
         "Upload and process a PDF first."
     )
     st.stop()
 
-selected_file = st.selectbox(
+selected_option = st.selectbox(
     "Select a processed document",
-    options=json_files,
-    format_func=lambda path: str(path),
+    options=document_options,
+    format_func=lambda option: option["label"],
 )
 
 try:
-    with selected_file.open(
-        "r",
-        encoding="utf-8",
-    ) as input_file:
-        document = json.load(input_file)
+    if selected_option["kind"] == "s3":
+        document = storage.download_json(selected_option["value"])
+    else:
+        with selected_option["value"].open("r", encoding="utf-8") as input_file:
+            document = json.load(input_file)
 
-except (OSError, json.JSONDecodeError) as error:
+except (OSError, json.JSONDecodeError, StorageError) as error:
     st.error(f"Unable to read the selected document: {error}")
     st.stop()
 
