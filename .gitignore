@@ -9,3 +9,4 @@ data/processed/
 data/chunks/
 vector_store/
 .DS_Store
+*.pem

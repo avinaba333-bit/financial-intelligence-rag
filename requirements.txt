@@ -9,3 +9,6 @@ numpy
 plotly
 pydantic
 pytest
+sentence-transformers
+faiss-cpu
+numpy

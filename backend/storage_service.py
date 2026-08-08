@@ -18,27 +18,103 @@ class S3Document:
 
 
 class S3Storage:
-    def __init__(self, bucket: str, region: str, prefix: str = "financial-reports"):
+    def __init__(
+        self,
+        bucket: str,
+        region: str,
+        prefix: str = "financial-reports",
+    ):
         if not bucket.strip():
             raise ValueError("S3_BUCKET is not configured.")
+
         self.bucket = bucket.strip()
         self.prefix = prefix.strip("/")
-        self.client = boto3.client("s3", region_name=region)
+        self.client = boto3.client(
+            "s3",
+            region_name=region,
+        )
 
     def _key(self, *parts: str) -> str:
-        clean_parts = [part.strip("/") for part in parts if part.strip("/")]
+        clean_parts = [
+            part.strip("/")
+            for part in parts
+            if part.strip("/")
+        ]
         return "/".join([self.prefix, *clean_parts])
 
-    def raw_key(self, company: str, year: str, filename: str) -> str:
-        return self._key(company, year, "raw", Path(filename).name)
+    def raw_key(
+        self,
+        company: str,
+        year: str,
+        filename: str,
+    ) -> str:
+        return self._key(
+            company,
+            year,
+            "raw",
+            Path(filename).name,
+        )
 
-    def processed_key(self, company: str, year: str, filename: str) -> str:
-        return self._key(company, year, "processed", f"{Path(filename).stem}.json")
+    def processed_key(
+        self,
+        company: str,
+        year: str,
+        filename: str,
+    ) -> str:
+        return self._key(
+            company,
+            year,
+            "processed",
+            f"{Path(filename).stem}.json",
+        )
 
-    def chunks_key(self, company: str, year: str, filename: str) -> str:
-        return self._key(company, year, "chunks", f"{Path(filename).stem}_chunks.json")
+    def chunks_key(
+        self,
+        company: str,
+        year: str,
+        filename: str,
+    ) -> str:
+        return self._key(
+            company,
+            year,
+            "chunks",
+            f"{Path(filename).stem}_chunks.json",
+        )
 
-    def upload_bytes(self, data: bytes, key: str, content_type: str) -> str:
+    def vector_index_key(
+        self,
+        company: str,
+        year: str,
+        filename: str,
+    ) -> str:
+        stem = Path(filename).stem.replace("_chunks", "")
+        return self._key(
+            company,
+            year,
+            "vector-store",
+            f"{stem}.faiss",
+        )
+
+    def vector_metadata_key(
+        self,
+        company: str,
+        year: str,
+        filename: str,
+    ) -> str:
+        stem = Path(filename).stem.replace("_chunks", "")
+        return self._key(
+            company,
+            year,
+            "vector-store",
+            f"{stem}_metadata.json",
+        )
+
+    def upload_bytes(
+        self,
+        data: bytes,
+        key: str,
+        content_type: str,
+    ) -> str:
         try:
             self.client.put_object(
                 Bucket=self.bucket,
@@ -47,31 +123,124 @@ class S3Storage:
                 ContentType=content_type,
             )
         except (BotoCoreError, ClientError) as error:
-            raise StorageError(f"Unable to upload s3://{self.bucket}/{key}: {error}") from error
+            raise StorageError(
+                f"Unable to upload s3://{self.bucket}/{key}: {error}"
+            ) from error
+
         return f"s3://{self.bucket}/{key}"
 
-    def upload_json(self, payload: dict[str, Any], key: str) -> str:
-        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-        return self.upload_bytes(body, key, "application/json")
+    def upload_json(
+        self,
+        payload: dict[str, Any],
+        key: str,
+    ) -> str:
+        body = json.dumps(
+            payload,
+            ensure_ascii=False,
+            indent=2,
+        ).encode("utf-8")
+
+        return self.upload_bytes(
+            body,
+            key,
+            "application/json",
+        )
 
     def list_processed_documents(self) -> list[S3Document]:
         prefix = self._key("") + "/"
         paginator = self.client.get_paginator("list_objects_v2")
         documents: list[S3Document] = []
+
         try:
-            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
+            for page in paginator.paginate(
+                Bucket=self.bucket,
+                Prefix=prefix,
+            ):
                 for item in page.get("Contents", []):
                     key = item["Key"]
+
                     if "/processed/" in key and key.endswith(".json"):
-                        documents.append(S3Document(key=key, label=f"S3: {key}"))
+                        documents.append(
+                            S3Document(
+                                key=key,
+                                label=f"S3: {key}",
+                            )
+                        )
         except (BotoCoreError, ClientError) as error:
-            raise StorageError(f"Unable to list documents in {self.bucket}: {error}") from error
-        return sorted(documents, key=lambda item: item.key)
+            raise StorageError(
+                f"Unable to list documents in {self.bucket}: {error}"
+            ) from error
 
-    def download_json(self, key: str) -> dict[str, Any]:
+        return sorted(
+            documents,
+            key=lambda item: item.key,
+        )
+
+    def list_chunk_documents(self) -> list[S3Document]:
+        prefix = self._key("") + "/"
+        paginator = self.client.get_paginator("list_objects_v2")
+        documents: list[S3Document] = []
+
         try:
-            response = self.client.get_object(Bucket=self.bucket, Key=key)
-            return json.loads(response["Body"].read().decode("utf-8"))
-        except (BotoCoreError, ClientError, json.JSONDecodeError) as error:
-            raise StorageError(f"Unable to read s3://{self.bucket}/{key}: {error}") from error
+            for page in paginator.paginate(
+                Bucket=self.bucket,
+                Prefix=prefix,
+            ):
+                for item in page.get("Contents", []):
+                    key = item["Key"]
 
+                    if (
+                        "/chunks/" in key
+                        and key.endswith("_chunks.json")
+                    ):
+                        documents.append(
+                            S3Document(
+                                key=key,
+                                label=f"S3 chunks: {key}",
+                            )
+                        )
+        except (BotoCoreError, ClientError) as error:
+            raise StorageError(
+                f"Unable to list chunk files in {self.bucket}: {error}"
+            ) from error
+
+        return sorted(
+            documents,
+            key=lambda item: item.key,
+        )
+
+    def download_json(
+        self,
+        key: str,
+    ) -> dict[str, Any]:
+        try:
+            response = self.client.get_object(
+                Bucket=self.bucket,
+                Key=key,
+            )
+            return json.loads(
+                response["Body"].read().decode("utf-8")
+            )
+        except (
+            BotoCoreError,
+            ClientError,
+            json.JSONDecodeError,
+        ) as error:
+            raise StorageError(
+                f"Unable to read s3://{self.bucket}/{key}: {error}"
+            ) from error
+
+    def download_bytes(
+        self,
+        key: str,
+    ) -> bytes:
+        try:
+            response = self.client.get_object(
+                Bucket=self.bucket,
+                Key=key,
+            )
+            return response["Body"].read()
+        except (BotoCoreError, ClientError) as error:
+            raise StorageError(
+                f"Unable to read s3://{self.bucket}/{key}: {error}"
+            ) from error

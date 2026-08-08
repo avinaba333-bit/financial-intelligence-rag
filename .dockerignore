@@ -10,3 +10,6 @@ data/raw
 data/processed
 data/chunks
 vector_store
+data/
+venv/
+__pycache__/
