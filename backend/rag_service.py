@@ -2,8 +2,9 @@ from functools import lru_cache
 from typing import Any
 
 import boto3
+import torch
 from botocore.exceptions import BotoCoreError, ClientError
-from transformers import pipeline
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 
 class GenerationError(RuntimeError):
@@ -13,11 +14,10 @@ class GenerationError(RuntimeError):
 @lru_cache(maxsize=1)
 def get_local_generator(model_id: str):
     """Load and cache a small CPU-compatible text generation model."""
-    return pipeline(
-        task="text2text-generation",
-        model=model_id,
-        device=-1,
-    )
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_id)
+    model.eval()
+    return tokenizer, model
 
 
 def build_evidence(results: list[dict[str, Any]]) -> str:
@@ -126,18 +126,29 @@ def generate_local_answer(
     )
 
     try:
-        generator = get_local_generator(model_id)
-        output = generator(
+        tokenizer, model = get_local_generator(model_id)
+        inputs = tokenizer(
             prompt,
-            max_new_tokens=220,
-            do_sample=False,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
         )
+
+        with torch.inference_mode():
+            output_ids = model.generate(
+                **inputs,
+                max_new_tokens=220,
+                do_sample=False,
+            )
+
+        answer = tokenizer.decode(
+            output_ids[0],
+            skip_special_tokens=True,
+        ).strip()
     except (OSError, RuntimeError, ValueError) as error:
         raise GenerationError(
             f"The local answer model could not run: {error}"
         ) from error
-
-    answer = output[0].get("generated_text", "").strip() if output else ""
 
     if not answer:
         raise GenerationError("The local answer model returned an empty answer.")
