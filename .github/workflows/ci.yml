@@ -1,23 +1,32 @@
-name: Project CI
+name: FinSight RAG CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: "195118190997"
+  ECR_REPOSITORY: financial-intelligence-rag
+  CONTAINER_NAME: financial-intelligence-rag
 
 jobs:
-  test-and-build:
+  test:
+    name: Test application
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
@@ -28,15 +37,94 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: Validate Python syntax
-        run: |
-          python -m compileall -q app.py config.py backend pages tests
+        run: python -m compileall -q app.py config.py backend pages tests
 
-      - name: Run tests
-        run: |
-          python -m pytest -q
+      - name: Run unit tests
+        run: python -m pytest -q
 
-      - name: Build Docker image
+  deploy:
+    name: Build and deploy to EC2
+    if: github.event_name != 'pull_request'
+    needs: test
+    runs-on: [self-hosted, Linux, X64, finsight-rag]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      - name: Sign in to Amazon ECR
         run: |
-          docker build \
-            -t financial-intelligence-rag:${{ github.sha }} \
-            .
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login \
+                --username AWS \
+                --password-stdin \
+                "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+      - name: Build and push versioned image
+        id: image
+        run: |
+          IMAGE_REPOSITORY="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPOSITORY"
+          IMAGE_URI="$IMAGE_REPOSITORY:${GITHUB_SHA}"
+
+          docker build --pull -t "$IMAGE_URI" -t "$IMAGE_REPOSITORY:latest" .
+          docker push "$IMAGE_URI"
+          docker push "$IMAGE_REPOSITORY:latest"
+
+          echo "uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy with health-check rollback
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        run: |
+          set -euo pipefail
+
+          PREVIOUS_IMAGE=""
+          if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+            PREVIOUS_IMAGE="$(docker inspect --format '{{.Config.Image}}' "$CONTAINER_NAME")"
+            docker rm -f "$CONTAINER_NAME"
+          fi
+
+          run_container() {
+            docker run -d \
+              --name "$CONTAINER_NAME" \
+              --restart unless-stopped \
+              -p 8501:8501 \
+              -e AWS_REGION="$AWS_REGION" \
+              -e S3_BUCKET="inancial-intelligence-rag-195118190997" \
+              -e S3_PREFIX="financial-reports" \
+              -e S3_ENABLED="true" \
+              -e CHAT_MODEL_ID="" \
+              -e LOCAL_CHAT_MODEL_ID="google/flan-t5-small" \
+              -e EMBEDDING_MODEL_ID="sentence-transformers/all-MiniLM-L6-v2" \
+              "$1"
+          }
+
+          run_container "$IMAGE_URI"
+
+          healthy=false
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent http://localhost:8501/_stcore/health | grep -q ok; then
+              healthy=true
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$healthy" != true ]; then
+            docker logs --tail 200 "$CONTAINER_NAME" || true
+            docker rm -f "$CONTAINER_NAME" || true
+
+            if [ -n "$PREVIOUS_IMAGE" ]; then
+              echo "New deployment failed; restoring $PREVIOUS_IMAGE"
+              run_container "$PREVIOUS_IMAGE"
+            fi
+
+            exit 1
+          fi
+
+          docker image prune -f
+          echo "FinSight RAG deployed successfully: $IMAGE_URI"

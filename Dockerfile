@@ -5,6 +5,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PIP_NO_CACHE_DIR=1
+ENV HF_HOME=/opt/huggingface
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgomp1 \
@@ -18,6 +19,11 @@ RUN python -m pip install --upgrade pip setuptools wheel \
        --index-url https://download.pytorch.org/whl/cpu \
        torch \
     && python -m pip install -r requirements.txt
+
+# Cache the RAG models during the image build so the first question does not
+# need to download them on EC2.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" \
+    && python -c "from transformers import AutoModelForSeq2SeqLM, AutoTokenizer; model='google/flan-t5-small'; AutoTokenizer.from_pretrained(model); AutoModelForSeq2SeqLM.from_pretrained(model)"
 
 COPY . .
 
