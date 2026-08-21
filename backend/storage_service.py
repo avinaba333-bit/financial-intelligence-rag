@@ -209,6 +209,37 @@ class S3Storage:
             key=lambda item: item.key,
         )
 
+    def list_vector_metadata(self) -> list[S3Document]:
+        """List metadata files for FAISS indexes stored in S3."""
+        prefix = self._key("") + "/"
+        paginator = self.client.get_paginator("list_objects_v2")
+        documents: list[S3Document] = []
+
+        try:
+            for page in paginator.paginate(
+                Bucket=self.bucket,
+                Prefix=prefix,
+            ):
+                for item in page.get("Contents", []):
+                    key = item["Key"]
+
+                    if (
+                        "/vector-store/" in key
+                        and key.endswith("_metadata.json")
+                    ):
+                        documents.append(
+                            S3Document(
+                                key=key,
+                                label=f"Vector index: {key}",
+                            )
+                        )
+        except (BotoCoreError, ClientError) as error:
+            raise StorageError(
+                f"Unable to list vector indexes in {self.bucket}: {error}"
+            ) from error
+
+        return sorted(documents, key=lambda item: item.key)
+
     def download_json(
         self,
         key: str,

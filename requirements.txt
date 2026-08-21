@@ -10,4 +10,6 @@ plotly
 pydantic
 pytest
 sentence-transformers
+transformers
+sentencepiece
 faiss-cpu

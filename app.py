@@ -2,12 +2,13 @@ import streamlit as st
 
 
 st.set_page_config(
-    page_title="Financial Intelligence Platform",
+    page_title="FinSight RAG",
     page_icon="📊",
     layout="wide",
 )
 
-st.title("AI-Powered Financial Intelligence Platform")
+st.title("FinSight RAG")
+st.subheader("AI Financial Intelligence Platform")
 
 st.write(
     """

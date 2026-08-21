@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Any
 
-import fitz
+import pymupdf
 
 
 def extract_pdf_pages(pdf_path: str) -> list[dict[str, Any]]:
@@ -25,7 +25,7 @@ def extract_pdf_pages(pdf_path: str) -> list[dict[str, Any]]:
 
     extracted_pages: list[dict[str, Any]] = []
 
-    with fitz.open(pdf_path) as document:
+    with pymupdf.open(pdf_path) as document:
         for page_index, page in enumerate(document):
             text = page.get_text("text").strip()
 

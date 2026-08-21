@@ -137,7 +137,8 @@ financial-intelligence-rag/
 - Text Chunking
 - Embeddings
 - Vector Database
-- RAG Chatbot
+- RAG Chatbot with Amazon Bedrock
+- Evidence retrieval and page citations
 
 ## Phase 3 ⏳
 
