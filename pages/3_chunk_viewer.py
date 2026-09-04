@@ -10,6 +10,7 @@ from backend.chunk_service import (
 )
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
+from backend.ui import apply_style, show_excerpt
 
 
 st.set_page_config(
@@ -19,6 +20,7 @@ st.set_page_config(
 )
 
 st.title("Document Chunk Generator and Viewer")
+apply_style()
 
 st.write(
     """
@@ -191,9 +193,6 @@ if chunk_output_path:
             f"{selected_chunk['character_count']}"
         )
 
-        st.text_area(
-            "Chunk content",
-            value=selected_chunk["text"],
-            height=400,
-            disabled=True,
-        )
+        st.caption("Complete extracted source block; the search window is highlighted.")
+        show_excerpt(selected_chunk.get("paragraph_text", selected_chunk["text"]),
+                     selected_chunk["text"])

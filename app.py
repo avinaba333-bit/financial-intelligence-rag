@@ -1,54 +1,118 @@
 import streamlit as st
 
+from backend.ui import apply_style, hero
+
 
 st.set_page_config(
-    page_title="FinSight RAG",
-    page_icon="📊",
-    layout="wide",
+    page_title='FinSight | Financial research',
+    page_icon='📊',
+    layout='wide',
+    initial_sidebar_state='expanded',
 )
 
-st.title("FinSight RAG")
-st.subheader("AI Financial Intelligence Platform")
 
-st.write(
-    """
-    This M.Tech project analyzes annual financial reports using
-    Retrieval-Augmented Generation, financial analytics and AWS services.
-    """
-)
+def home_page():
+    apply_style()
+    hero(
+        'Financial research, with the evidence.',
+        'Turn annual reports into searchable knowledge. Read the answer, '
+        'inspect the source, and verify the original page.',
+    )
 
-st.success("Application setup completed successfully.")
+    st.page_link(
+        'pages/5_ai_assistant.py',
+        label='Open report assistant',
+        icon='💬',
+    )
 
-st.markdown("---")
+    st.subheader('From annual report to cited answer')
+    for column, title, description, page in zip(
+        st.columns(3),
+        ['01 · Add reports', '02 · Prepare evidence', '03 · Ask & verify'],
+        [
+            'Upload PDFs with the company and financial year. Preserve the '
+            'original document.',
+            'Generate source-linked chunks and build a searchable vector index.',
+            'Search the report, read complete source blocks, and inspect '
+            'highlighted PDF pages.',
+        ],
+        [
+            'pages/1_upload_reports.py',
+            'pages/3_chunk_viewer.py',
+            'pages/5_ai_assistant.py',
+        ],
+    ):
+        with column, st.container(border=True):
+            st.subheader(title)
+            st.write(description)
+            st.page_link(page, label='Open workspace →')
 
-st.header("Project Modules")
+    st.divider()
+    traceable, limits = st.columns(2)
+    with traceable:
+        st.subheader('Designed for traceable research')
+        st.write(
+            'Hybrid semantic and keyword search, source cards, original-page '
+            'previews, and conservative citation and number checks on AI drafts.'
+        )
+    with limits:
+        st.subheader('Know the limits')
+        st.write(
+            'The assistant searches one selected report at a time. Complex '
+            'tables require visual verification. Automated KPI calculations '
+            'and cross-report analytics are future work.'
+        )
 
-col1, col2, col3 = st.columns(3)
+    st.caption(
+        'FinSight · AI-Powered Financial Document Analysis using RAG · '
+        'M.Tech project'
+    )
 
-with col1:
-    st.subheader("Document Processing")
-    st.write("Upload and process annual financial reports.")
 
-with col2:
-    st.subheader("AI Assistant")
-    st.write("Ask questions and receive answers with source pages.")
+pages = {
+    'Overview': [
+        st.Page(
+            home_page,
+            title='Home',
+            icon='🏠',
+            default=True,
+        ),
+    ],
+    'Document workspace': [
+        st.Page(
+            'pages/1_upload_reports.py',
+            title='Upload reports',
+            icon='📤',
+        ),
+        st.Page(
+            'pages/2_document_summary.py',
+            title='Document summary',
+            icon='📑',
+        ),
+        st.Page(
+            'pages/3_chunk_viewer.py',
+            title='Chunk viewer',
+            icon='🧩',
+        ),
+        st.Page(
+            'pages/4_vector_index.py',
+            title='Vector index',
+            icon='🔍',
+        ),
+    ],
+    'Financial research': [
+        st.Page(
+            'pages/5_ai_assistant.py',
+            title='AI assistant',
+            icon='💬',
+        ),
+        st.Page(
+            'pages/6_rag_evaluation.py',
+            title='RAG evaluation',
+            icon='📊',
+        ),
+    ],
+}
 
-with col3:
-    st.subheader("Financial Analytics")
-    st.write("Analyze KPIs, ratios, risks and company performance.")
-
-st.markdown("---")
-
-st.subheader("Planned Capabilities")
-
-st.write(
-    """
-    - Multi-document annual-report analysis
-    - Financial KPI extraction
-    - Revenue and profit trend visualization
-    - Company and year comparison
-    - Business-segment profit/loss analysis
-    - Risk analysis
-    - Evidence-based answers with page citations
-    """
-)
+navigation = st.navigation(pages, position='sidebar', expanded=True)
+navigation.run()

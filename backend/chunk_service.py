@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +58,19 @@ def generate_chunk_payload(
         overlap=overlap,
     )
 
+    document_id = hashlib.sha256(json.dumps([
+        document.get("company"), document.get("financial_year"),
+        document.get("source_file"), pages[0].get("pdf_sha256"),
+    ]).encode()).hexdigest()[:24]
+    for chunk in chunks:
+        chunk.update({"document_id": document_id,
+                      "company": document.get("company"),
+                      "financial_year": document.get("financial_year")})
+
     output_data = {
+        "schema_version": 2,
+        "document_id": document_id,
+        "storage": document.get("storage", {}),
         "company": document.get("company"),
         "financial_year": document.get("financial_year"),
         "source_file": document.get("source_file"),

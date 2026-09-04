@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 from functools import lru_cache
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import faiss
 import numpy as np
-from sentence_transformers import SentenceTransformer
+
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -13,6 +18,7 @@ DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 def get_embedding_model(
     model_name: str = DEFAULT_MODEL,
 ) -> SentenceTransformer:
+    from sentence_transformers import SentenceTransformer
     return SentenceTransformer(model_name)
 
 
@@ -54,6 +60,12 @@ def search_faiss_index(
 ) -> list[dict[str, Any]]:
     if not question.strip():
         raise ValueError("Question cannot be empty.")
+    if top_k <= 0:
+        raise ValueError("top_k must be positive.")
+    if index.ntotal != len(chunks):
+        raise ValueError("Index and chunk metadata differ. Rebuild the index.")
+    if not index.ntotal:
+        return []
 
     model = get_embedding_model()
 
@@ -75,6 +87,7 @@ def search_faiss_index(
             continue
 
         result = dict(chunks[index_position])
+        result["_index_position"] = int(index_position)
         result["similarity_score"] = float(score)
         results.append(result)
 

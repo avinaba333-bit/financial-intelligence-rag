@@ -94,7 +94,7 @@ jobs:
               --restart unless-stopped \
               -p 8501:8501 \
               -e AWS_REGION="$AWS_REGION" \
-              -e S3_BUCKET="inancial-intelligence-rag-195118190997" \
+              -e S3_BUCKET="avinaba-rag-documents" \
               -e S3_PREFIX="financial-reports" \
               -e S3_ENABLED="true" \
               -e CHAT_MODEL_ID="" \

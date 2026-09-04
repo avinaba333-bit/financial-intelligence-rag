@@ -94,6 +94,9 @@ if st.button(
             index_bytes = serialize_faiss_index(index)
 
             metadata = {
+                "schema_version": chunk_payload.get("schema_version", 1),
+                "document_id": chunk_payload.get("document_id"),
+                "storage": chunk_payload.get("storage", {}),
                 "company": chunk_payload.get("company"),
                 "financial_year": chunk_payload.get(
                     "financial_year"

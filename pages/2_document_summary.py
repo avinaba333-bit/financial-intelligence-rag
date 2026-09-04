@@ -5,6 +5,7 @@ import streamlit as st
 
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
+from backend.ui import apply_style, show_excerpt
 
 
 st.set_page_config(
@@ -14,6 +15,7 @@ st.set_page_config(
 )
 
 st.title("Processed Financial Documents")
+apply_style()
 
 processed_directory = Path("data/processed")
 
@@ -128,12 +130,8 @@ st.subheader(
 page_text = selected_page_data.get("text", "").strip()
 
 if page_text:
-    st.text_area(
-        "Page content",
-        value=page_text,
-        height=500,
-        disabled=True,
-    )
+    for paragraph in selected_page_data.get("paragraphs", [{"text": page_text}]):
+        show_excerpt(paragraph["text"])
 
     st.download_button(
         label="Download page text",

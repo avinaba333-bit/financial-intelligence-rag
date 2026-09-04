@@ -7,6 +7,7 @@ import streamlit as st
 from backend.pdf_processor import extract_pdf_pages
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_ENABLED, S3_PREFIX
+from backend.ui import apply_style, show_excerpt
 
 
 st.set_page_config(
@@ -16,6 +17,7 @@ st.set_page_config(
 )
 
 st.title("Upload Financial Reports")
+apply_style()
 
 st.write(
     """
@@ -75,6 +77,9 @@ if st.button("Upload and Process", type="primary"):
     if not company_name.strip():
         st.error("Enter the company name.")
 
+    elif not clean_folder_name(company_name) or not clean_folder_name(financial_year):
+        st.error("Company and financial year must contain letters or numbers.")
+
     elif not financial_year.strip():
         st.error("Enter the financial year.")
 
@@ -110,7 +115,7 @@ if st.button("Upload and Process", type="primary"):
         )
 
         for uploaded_file in uploaded_files:
-            local_pdf_path = raw_directory / uploaded_file.name
+            local_pdf_path = raw_directory / Path(uploaded_file.name).name
 
             file_bytes = uploaded_file.getvalue()
 
@@ -167,6 +172,9 @@ if st.button("Upload and Process", type="primary"):
                 pages_with_text = sum(
                     1 for page in pages if page["text"]
                 )
+                if pages_with_text < len(pages):
+                    st.warning(f"{len(pages) - pages_with_text} pages contain no extractable text. "
+                               "Scanned pages need OCR before they can be searched.")
 
                 st.success(
                     f"{uploaded_file.name} processed successfully."
@@ -194,9 +202,8 @@ if st.button("Upload and Process", type="primary"):
                         )
 
                         if page["text"]:
-                            st.text(
-                                page["text"][:2000]
-                            )
+                            for paragraph in page.get("paragraphs", [{"text": page["text"]}]):
+                                show_excerpt(paragraph["text"])
                         else:
                             st.warning(
                                 "No readable text detected on this page."
