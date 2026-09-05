@@ -4,7 +4,7 @@
 
 M.Tech (Data Science and Artificial Intelligence) project by **Avinaba Ghosh**.
 
-FinSight RAG converts annual reports into searchable financial evidence. A user can upload a PDF, process it into page-aware source blocks, build a hybrid search index, ask questions, inspect cited passages, open the corresponding original PDF page, visualize compatible financial figures, and measure retrieval quality through a labelled evaluation workflow.
+FinSight RAG converts annual reports into searchable financial evidence. A user can upload a PDF, process it into page-aware source blocks, build a hybrid search index, ask questions, inspect cited passages, open the corresponding original PDF page, visualize compatible financial figures, and measure retrieval quality through a labelled evaluation workflow. Current and future-looking questions can also open a strictly separate, source-linked web-research section without mixing live web material into the report RAG prompt.
 
 Live application: [http://finsight-rag.duckdns.org/](http://finsight-rag.duckdns.org/)
 
@@ -15,6 +15,7 @@ Live application: [http://finsight-rag.duckdns.org/](http://finsight-rag.duckdns
 - Reduce unsupported model output through citation and number checks.
 - Present financial values through readable KPI cards, tables, and charts when the evidence is suitable.
 - Measure retrieval quality using reproducible benchmark questions.
+- Separate uploaded-report evidence from current web research for plans, investments, outlook, and post-report periods.
 - Demonstrate a complete cloud and MLOps workflow rather than only a notebook prototype.
 
 ## Research foundation
@@ -89,6 +90,18 @@ The project does not attempt to reproduce the paper’s original Wikipedia-scale
 - Preserve the source file and PDF page for every plotted value.
 - Refuse to create a chart when fewer than two compatible values are available.
 
+### 5A. Source-isolated current web research
+
+- Route current, future, investment, plan, outlook, and post-report-year questions to an additional live-search path.
+- Keep uploaded-report evidence under `E` citations and web sources under `W` citations.
+- Refuse deterministically when a requested financial year is later than the selected report coverage.
+- Display extractive web source summaries, domains, direct links, and a UTC search timestamp.
+- Prefer regulatory/exchange, company-domain, investor-relations, and established-news results while filtering obvious price-prediction listings.
+- Preserve the report response when live search is unavailable.
+- Let the user select Automatic, Always include, or Off from the research sidebar.
+
+Detailed specification: [Dual-source financial research requirement](docs/dual_source_research_requirement.md).
+
 ### 6. RAG evaluation
 
 - Upload a labelled JSON benchmark containing questions and expected pages.
@@ -129,8 +142,11 @@ flowchart TD
     K --> R
     R --> X[Optional CrossEncoder reranker]
     X --> G[FLAN-T5 or optional Bedrock generation]
-    G --> V[Citation and number checks]
-    V --> O[Answer, KPI/chart, evidence, and PDF page]
+    G --> V[E-citation and number checks]
+    V --> O[Uploaded-report answer and PDF page]
+    UI --> Q{Current or future question?}
+    Q -->|Yes| W[Independent live web search]
+    W --> WS[W-cited web answer and links]
 ```
 
 ## AWS and delivery resources
@@ -181,7 +197,7 @@ Only reports with completed vector metadata appear in the AI Assistant and RAG E
 | Interface | Streamlit, responsive CSS, Plotly |
 | PDF processing | PyMuPDF, pypdf |
 | Embeddings | Sentence Transformers, MiniLM |
-| Retrieval | FAISS, BM25, reciprocal-rank fusion, optional CrossEncoder |
+| Retrieval | FAISS, BM25, reciprocal-rank fusion, optional CrossEncoder; DDGS metasearch for the isolated live-web path |
 | Generation | Local FLAN-T5; optional Amazon Bedrock Converse |
 | Data and validation | Python, NumPy, Pandas, Pydantic |
 | Cloud storage and runtime | Amazon S3, Amazon ECR, Amazon EC2 |
@@ -221,6 +237,10 @@ S3_PREFIX=financial-reports
 S3_ENABLED=true
 LOCAL_CHAT_MODEL_ID=google/flan-t5-small
 CHAT_MODEL_ID=
+WEB_SEARCH_ENABLED=true
+WEB_SEARCH_REGION=in-en
+WEB_SEARCH_BACKEND=auto
+WEB_SEARCH_TIMEOUT_SECONDS=10
 ```
 
 | Variable | Purpose |
@@ -231,6 +251,10 @@ CHAT_MODEL_ID=
 | `S3_ENABLED` | Enables S3 upload from the Upload Reports page |
 | `LOCAL_CHAT_MODEL_ID` | Local fallback generator; defaults to `google/flan-t5-small` |
 | `CHAT_MODEL_ID` | Optional Bedrock model ID; leave empty when Bedrock is unavailable |
+| `WEB_SEARCH_ENABLED` | Enables the independent current-web research path; defaults to `true` |
+| `WEB_SEARCH_REGION` | DDGS region used for live search; defaults to `in-en` |
+| `WEB_SEARCH_BACKEND` | Comma-delimited DDGS engines used for live search |
+| `WEB_SEARCH_TIMEOUT_SECONDS` | Per-provider live-search timeout; invalid values safely fall back to 10 seconds |
 
 Use the normal AWS credentials provider chain locally and the attached EC2 instance role in deployment. Never store AWS keys, session tokens, or DuckDNS tokens in source control.
 
@@ -290,6 +314,8 @@ The automated suite uses synthetic PDFs, real FAISS serialization, mocked model/
 - Parent-block preservation and chunk metadata.
 - Semantic and keyword fusion and deduplication.
 - Citation and numeric guardrails.
+- Future-year routing, deterministic out-of-period refusal, and source namespace isolation.
+- Web result URL validation, deduplication, ranking, and provider-failure isolation.
 - Model-failure source fallback.
 - PDF fingerprint validation and highlighted source preview.
 - Report switching and stable source interactions.
@@ -308,6 +334,8 @@ Automated tests do not establish financial answer accuracy. Final acceptance req
 - Complex tables and multi-column layouts must be verified against the original PDF page.
 - OCR is not implemented; scanned pages may contain no searchable text.
 - The assistant currently searches one selected report at a time.
+- Live web answers are source extracts, not audited facts; upstream search availability and ranking can change.
+- A current plan or management target does not establish a future realised net-profit figure.
 - Cross-company and cross-report comparison are not yet implemented.
 - The visualization layer only plots explicitly labelled, compatible evidence values and may correctly return no chart.
 - Questions are searched independently; repeat the company, year, and metric in follow-up questions.

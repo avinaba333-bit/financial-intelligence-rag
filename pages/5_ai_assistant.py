@@ -9,12 +9,31 @@ from backend.financial_visualization_service import (
     visualization_rows,
 )
 from backend.pdf_processor import render_evidence_page
-from backend.rag_service import (GenerationError, generate_grounded_answer,
-                                 generate_local_answer, source_excerpt_answer)
+from backend.rag_service import (INSUFFICIENT, GenerationError,
+                                 generate_grounded_answer, generate_local_answer,
+                                 source_excerpt_answer)
+from backend.research_planning_service import (
+    WEB_AUTO,
+    WEB_MODES,
+    WEB_OFF,
+    document_scope_answer,
+    plan_research,
+)
 from backend.retrieval_service import KeywordIndex, fuse_results, rerank_results
 from backend.storage_service import S3Storage, StorageError
 from backend.ui import apply_style, hero, readable_report_label, show_excerpt
-from config import AWS_REGION, CHAT_MODEL_ID, LOCAL_CHAT_MODEL_ID, S3_BUCKET, S3_PREFIX
+from backend.web_research_service import WebResearchError, search_current_web
+from config import (
+    AWS_REGION,
+    CHAT_MODEL_ID,
+    LOCAL_CHAT_MODEL_ID,
+    S3_BUCKET,
+    S3_PREFIX,
+    WEB_SEARCH_ENABLED,
+    WEB_SEARCH_BACKEND,
+    WEB_SEARCH_REGION,
+    WEB_SEARCH_TIMEOUT_SECONDS,
+)
 
 st.set_page_config(page_title='FinSight | Report assistant', page_icon='💬', layout='wide')
 apply_style()
@@ -79,6 +98,18 @@ with st.sidebar:
     selected = st.selectbox('Annual report', reports, format_func=readable_report_label)
     mode = st.radio('Answer mode', ['AI answer', 'Source excerpts'],
                     help='AI drafts receive citation and number checks, not full factual verification.')
+    available_web_modes = list(WEB_MODES) if WEB_SEARCH_ENABLED else [WEB_OFF]
+    web_mode = st.selectbox(
+        'Current web research',
+        available_web_modes,
+        index=available_web_modes.index(WEB_AUTO) if WEB_AUTO in available_web_modes else 0,
+        help=(
+            'Automatic mode adds a separate live-web section only for current, '
+            'future, investment, plan, outlook, or post-report-year questions.'
+        ),
+    )
+    if not WEB_SEARCH_ENABLED:
+        st.caption('Live web research is disabled by configuration.')
     with st.expander('Search settings'):
         top_k = st.slider('Source blocks', 3, 10, 5)
         use_reranker = st.checkbox('Use CPU reranker', value=False,
@@ -242,6 +273,59 @@ def show_financial_visualization(question, results, chart_key):
             )
 
 
+def show_web_research(web_research, web_error=None):
+    """Render web material in its own namespace and source section."""
+    st.markdown('#### Current web research answer')
+    st.caption(
+        'Independent live-web path · W-citations are web sources and are never '
+        'used as uploaded-report evidence.'
+    )
+    if web_error:
+        st.warning(web_error)
+        return
+    if not web_research:
+        st.info('No web research result is available for this response.')
+        return
+
+    st.write(web_research.get('answer', ''))
+    sources = web_research.get('sources', [])
+    st.caption(f"Searched at {web_research.get('searched_at', 'unknown time')} · {len(sources)} sources")
+    if not sources:
+        return
+
+    with st.expander(f'Web sources · {len(sources)} links', expanded=True):
+        for source in sources:
+            st.markdown(f"**{source.get('evidence_id', 'W?')}**")
+            st.write(source.get('title') or source.get('domain') or 'Web source')
+            st.caption(
+                ' · '.join(
+                    part for part in [source.get('domain'), source.get('published')] if part
+                )
+            )
+            st.write(source.get('summary', ''))
+            st.link_button(
+                f"Open {source.get('evidence_id', 'web source')}",
+                source['url'],
+                width='stretch',
+            )
+
+
+def show_assistant_response(message, message_number):
+    """Keep report and web answers visibly separate on current and historic turns."""
+    st.markdown('#### Uploaded report evidence answer')
+    st.markdown(message['content'])
+    if message.get('evidence') and message.get('question'):
+        show_financial_visualization(
+            message['question'],
+            message['evidence'],
+            f'history-chart-{message_number}',
+        )
+    if message.get('evidence'):
+        show_sources(message['evidence'], message_number)
+    if message.get('web_research') or message.get('web_error'):
+        show_web_research(message.get('web_research'), message.get('web_error'))
+
+
 conversation, reference = st.columns([1.15, 1], gap='large')
 with conversation:
     st.subheader('Report conversation')
@@ -266,15 +350,10 @@ with conversation:
     for n, message in enumerate(st.session_state.messages):
         avatar = '👤' if message['role'] == 'user' else '🤖'
         with st.chat_message(message['role'], avatar=avatar):
-            st.markdown(message['content'])
-            if message.get('evidence') and message.get('question'):
-                show_financial_visualization(
-                    message['question'],
-                    message['evidence'],
-                    f'history-chart-{n}',
-                )
-            if message.get('evidence'):
-                show_sources(message['evidence'], n)
+            if message['role'] == 'assistant':
+                show_assistant_response(message, n)
+            else:
+                st.markdown(message['content'])
     question = question or suggested
     if question:
         st.session_state.messages.append({'role': 'user', 'content': question})
@@ -282,6 +361,11 @@ with conversation:
             st.markdown(question)
         with st.chat_message('assistant', avatar='🤖'):
             try:
+                research_plan = plan_research(
+                    question,
+                    metadata.get('financial_year'),
+                    web_mode,
+                )
                 with st.spinner('Finding relevant passages…'):
                     candidates = min(max(top_k * 5, 25), len(chunks))
                     dense = search_faiss_index(index, chunks, question, max(candidates, 1))
@@ -296,7 +380,14 @@ with conversation:
                             results = results[:top_k]
                     results = [dict(result, evidence_id=f'E{i}') for i, result in enumerate(results, 1)]
                 with st.spinner('Preparing an evidence-grounded response…'):
-                    if mode == 'Source excerpts':
+                    scope_answer = document_scope_answer(
+                        research_plan,
+                        metadata.get('financial_year'),
+                        INSUFFICIENT,
+                    )
+                    if scope_answer:
+                        answer = scope_answer
+                    elif mode == 'Source excerpts':
                         answer = source_excerpt_answer(results)
                     else:
                         try:
@@ -306,24 +397,38 @@ with conversation:
                                 answer = generate_local_answer(question, results, LOCAL_CHAT_MODEL_ID)
                         except GenerationError:
                             answer = source_excerpt_answer(results, 'The answer model is unavailable. The retrieved evidence is still available.')
-                st.markdown(answer)
+
+                web_research = None
+                web_error = None
+                if research_plan.include_web:
+                    try:
+                        with st.spinner('Searching current web sources separately…'):
+                            web_research = search_current_web(
+                                metadata.get('company') or 'selected company',
+                                question,
+                                region=WEB_SEARCH_REGION,
+                                timeout=WEB_SEARCH_TIMEOUT_SECONDS,
+                                backend=WEB_SEARCH_BACKEND,
+                            ).to_dict()
+                    except WebResearchError as error:
+                        web_error = str(error)
+
                 message_number = len(st.session_state.messages)
-                if results:
-                    show_financial_visualization(
-                        question,
-                        results,
-                        f'current-chart-{message_number}',
-                    )
-                    show_sources(results, message_number)
-                    st.session_state.active_evidence = results[0]
-                else:
-                    st.session_state.pop('active_evidence', None)
-                st.session_state.messages.append({
+                response_message = {
                     'role': 'assistant',
                     'content': answer,
                     'evidence': results,
                     'question': question,
-                })
+                    'research_plan': research_plan.to_dict(),
+                    'web_research': web_research,
+                    'web_error': web_error,
+                }
+                show_assistant_response(response_message, message_number)
+                if results:
+                    st.session_state.active_evidence = results[0]
+                else:
+                    st.session_state.pop('active_evidence', None)
+                st.session_state.messages.append(response_message)
             except (ImportError, StorageError, ValueError, RuntimeError, OSError):
                 error_message = 'Search could not complete. Check the embedding model installation and index, then try again.'
                 st.error(error_message)

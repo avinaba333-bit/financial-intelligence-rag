@@ -94,6 +94,45 @@ def test_model_failure_retains_sources(fake_reports, monkeypatch):
     assert at.session_state['messages'][-1]['evidence']
 
 
+def test_future_question_keeps_report_and_web_answers_separate(fake_reports, monkeypatch):
+    from datetime import datetime, timezone
+    import backend.web_research_service as web
+
+    def fake_web_search(*args, **kwargs):
+        return web.WebResearchResult(
+            query='Example Bank investment outlook 2026',
+            answer='A current investor update describes a planned branch investment. [W1]',
+            sources=(
+                web.WebSource(
+                    evidence_id='W1',
+                    title='Investor update',
+                    url='https://example.com/investor-update',
+                    summary='A planned branch investment was announced.',
+                    domain='example.com',
+                    published='2026-08-30',
+                ),
+            ),
+            searched_at=datetime(2026, 9, 5, tzinfo=timezone.utc).isoformat(),
+        )
+
+    monkeypatch.setattr(web, 'search_current_web', fake_web_search)
+    at = AppTest.from_file(str(ROOT / 'pages/5_ai_assistant.py'), default_timeout=15).run()
+    at.chat_input[0].set_value('What will net profit be in FY 2028-29?').run()
+
+    assert not at.exception
+    response = at.session_state['messages'][-1]
+    assert response['content'].startswith(
+        'The selected report evidence is insufficient to answer this question.'
+    )
+    assert response['research_plan']['document_out_of_period']
+    assert response['web_research']['sources'][0]['evidence_id'] == 'W1'
+    assert all(source['evidence_id'].startswith('E') for source in response['evidence'])
+    rendered = '\n'.join(markdown.value for markdown in at.markdown)
+    assert 'Uploaded report evidence answer' in rendered
+    assert 'Current web research answer' in rendered
+    assert '[W1]' in rendered
+
+
 def test_landing_page_has_working_navigation():
     at = AppTest.from_file(str(ROOT / 'app.py'), default_timeout=15).run()
     assert not at.exception
