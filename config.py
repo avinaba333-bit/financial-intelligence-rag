@@ -15,3 +15,15 @@ LOCAL_CHAT_MODEL_ID = os.getenv(
     "LOCAL_CHAT_MODEL_ID",
     "google/flan-t5-small",
 )
+WEB_SEARCH_ENABLED = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in {
+    "1", "true", "yes"
+}
+WEB_SEARCH_REGION = os.getenv("WEB_SEARCH_REGION", "in-en")
+WEB_SEARCH_BACKEND = os.getenv(
+    "WEB_SEARCH_BACKEND",
+    "auto",
+)
+try:
+    WEB_SEARCH_TIMEOUT_SECONDS = max(3, int(os.getenv("WEB_SEARCH_TIMEOUT_SECONDS", "10")))
+except ValueError:
+    WEB_SEARCH_TIMEOUT_SECONDS = 10

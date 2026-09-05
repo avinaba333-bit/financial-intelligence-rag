@@ -13,3 +13,4 @@ sentence-transformers
 transformers
 sentencepiece
 faiss-cpu
+ddgs

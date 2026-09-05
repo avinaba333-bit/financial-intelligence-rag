@@ -100,6 +100,10 @@ jobs:
               -e CHAT_MODEL_ID="" \
               -e LOCAL_CHAT_MODEL_ID="google/flan-t5-small" \
               -e EMBEDDING_MODEL_ID="sentence-transformers/all-MiniLM-L6-v2" \
+              -e WEB_SEARCH_ENABLED="true" \
+              -e WEB_SEARCH_REGION="in-en" \
+              -e WEB_SEARCH_BACKEND="auto" \
+              -e WEB_SEARCH_TIMEOUT_SECONDS="10" \
               "$1"
           }
 
