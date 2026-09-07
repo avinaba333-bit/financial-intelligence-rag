@@ -240,15 +240,9 @@ def show_financial_visualization(question, results, chart_key):
         spec = None
 
     if spec is None:
-        points = extract_financial_data(results)
-        if len(points) == 1:
-            point = points[0]
-            st.markdown('#### Key financial figure')
-            metric_column, source_column = st.columns([1, 2])
-            metric_column.metric(point.label, point.display_value)
-            source_column.caption(
-                f'Source: {point.source_file} · PDF page {point.page_number}'
-            )
+        # A standalone regex match is too ambiguous for a financial card: PDF
+        # prose also contains page, note, section, date, and legal-reference
+        # numbers.  Comparable series are rendered only after validation.
         return
 
     with st.expander('Financial visualization', expanded=True):

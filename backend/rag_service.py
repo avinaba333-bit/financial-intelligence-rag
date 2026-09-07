@@ -79,7 +79,7 @@ def source_excerpt_answer(results, reason=None):
     return f'{heading}\n\nOpen the source cards to read the original text. {refs}\n\n_No synthesized answer is being presented._'
 
 
-def extractive_grounded_answer(question, results, reason=None, max_sentences=4):
+def extractive_grounded_answer(question, results, reason=None, max_sentences=3):
     """Build a useful, citation-safe fallback from exact evidence sentences.
 
     Small local models occasionally omit citations or alter a financial number.
@@ -97,6 +97,14 @@ def extractive_grounded_answer(question, results, reason=None, max_sentences=4):
         term for term in re.findall(r'[a-z0-9]+', (question or '').lower())
         if len(term) > 2 and term not in stop_words
     }
+    ordered_terms = [
+        term for term in re.findall(r'[a-z0-9]+', (question or '').lower())
+        if len(term) > 2 and term not in stop_words
+    ]
+    query_phrases = {
+        ' '.join(ordered_terms[index:index + 2])
+        for index in range(len(ordered_terms) - 1)
+    }
     candidates = []
     seen = set()
     for position, result in enumerate(results, 1):
@@ -111,13 +119,41 @@ def extractive_grounded_answer(question, results, reason=None, max_sentences=4):
             if len(sentence) < 15 or sentence.casefold() in seen:
                 continue
             seen.add(sentence.casefold())
-            sentence_terms = set(re.findall(r'[a-z0-9]+', sentence.lower()))
+            sentence_lower = sentence.lower()
+            sentence_terms = set(re.findall(r'[a-z0-9]+', sentence_lower))
             overlap = len(query_terms & sentence_terms)
             contains_figure = bool(_numbers(sentence))
-            candidates.append((overlap, contains_figure, -position,
+            phrase_hits = sum(phrase in sentence_lower for phrase in query_phrases)
+            financial_amount = bool(re.search(
+                r'(?:₹|\b(?:inr|rs\.?)\b)\s*\d|\d[\d,.]*\s*'
+                r'(?:crore|lakh|million|billion|%)',
+                sentence,
+                re.IGNORECASE,
+            ))
+            legal_context = bool(re.search(
+                r'\b(?:section|sub-section|act|regulation|statutory)\b',
+                sentence_lower,
+            ))
+            definition_context = bool(re.search(
+                r'\b(?:is defined as|means|is profit for the year before)\b',
+                sentence_lower,
+            ))
+            starts_with_metric = any(
+                sentence_lower.startswith(phrase) for phrase in query_phrases
+            )
+            score = (
+                overlap * 3
+                + phrase_hits * 8
+                + int(contains_figure) * 2
+                + int(financial_amount) * 5
+                + int(starts_with_metric) * 4
+                - int(legal_context) * 10
+                - int(definition_context) * 5
+            )
+            candidates.append((score, overlap, phrase_hits, financial_amount, -position,
                                -sentence_position, sentence, ref))
 
-    relevant = [item for item in candidates if item[0] > 0]
+    relevant = [item for item in candidates if item[1] > 0]
     ranked = sorted(relevant or candidates, reverse=True)
     selected = ranked[:max_sentences]
     if not selected:
@@ -170,8 +206,7 @@ def _checked(answer, used, all_results, question=''):
     return extractive_grounded_answer(
         question,
         all_results,
-        'The generated draft did not pass the citation/number checks. '
-        'Showing exact statements from the retrieved report evidence instead:',
+        'Based on the strongest matching statements in the uploaded report:',
     )
 
 

@@ -76,7 +76,7 @@ def test_empty_evidence_never_loads_models():
 def test_rejected_answer_is_not_shown_as_fact():
     answer = _checked('Profit was 9999. [E1]', evidence(), evidence())
     assert '9999' not in answer
-    assert 'did not pass' in answer
+    assert 'strongest matching statements' in answer
     assert 'Profit was Rs 1,250 crore. [E1]' in answer
 
 
@@ -89,6 +89,24 @@ def test_extractive_fallback_selects_relevant_exact_sentences_with_citations():
     answer = extractive_grounded_answer('What was the profit?', results)
     assert 'Profit was Rs 1,250 crore. [E1]' in answer
     assert '[E2]' not in answer
+
+
+def test_extractive_fallback_prefers_reported_metric_over_legal_reference():
+    results = [
+        {
+            'evidence_id': 'E1', 'page_number': 1,
+            'text': 'Two percent of average net profit is required under section 135.',
+        },
+        {
+            'evidence_id': 'E2', 'page_number': 2,
+            'text': 'Net Profit increased by 10.9 percent to INR 74,671.3 crore.',
+        },
+    ]
+    answer = extractive_grounded_answer(
+        'What does the report say about net profit?', results, max_sentences=1
+    )
+    assert '74,671.3 crore. [E2]' in answer
+    assert 'section 135' not in answer
 
 
 def test_bedrock_prompt_and_citation_validation(monkeypatch):
