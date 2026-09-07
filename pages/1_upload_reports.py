@@ -50,6 +50,11 @@ uploaded_files = st.file_uploader(
     "Select PDF annual reports",
     type=["pdf"],
     accept_multiple_files=True,
+    help="PDF files up to 100 MB each are supported.",
+)
+st.caption(
+    "Maximum size: 100 MB per PDF. Keep this page open until the file name "
+    "appears without a red upload-error icon."
 )
 
 use_s3 = st.checkbox(

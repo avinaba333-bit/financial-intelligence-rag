@@ -1,0 +1,7 @@
+[server]
+# Annual reports are commonly larger than a few megabytes. Keep the browser
+# upload and WebSocket/message limits aligned; the reverse proxy must use the
+# same or a higher client-body limit.
+maxUploadSize = 100
+maxMessageSize = 100
+
