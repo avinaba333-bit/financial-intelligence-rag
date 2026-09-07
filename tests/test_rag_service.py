@@ -109,6 +109,27 @@ def test_extractive_fallback_prefers_reported_metric_over_legal_reference():
     assert 'section 135' not in answer
 
 
+def test_extractive_fallback_rejoins_pdf_wrapped_sentence_and_drops_legal_hit():
+    results = [
+        {
+            'evidence_id': 'E1',
+            'text': (
+                'Net Profit increased by 10.9 percent to INR 74,671.3 crore from\n'
+                'INR 67,347.4 crore in the previous year.'
+            ),
+        },
+        {
+            'evidence_id': 'E2',
+            'text': 'Two percent of average net profit is required under section 135.',
+        },
+    ]
+    answer = extractive_grounded_answer(
+        'What does the report say about net profit?', results
+    )
+    assert 'crore from INR 67,347.4 crore in the previous year. [E1]' in answer
+    assert 'section 135' not in answer
+
+
 def test_bedrock_prompt_and_citation_validation(monkeypatch):
     import backend.rag_service as rag
     calls = []
