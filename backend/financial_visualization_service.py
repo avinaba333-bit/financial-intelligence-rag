@@ -14,7 +14,12 @@ AMOUNT = (
     r"(?P<value>-?\d[\d,]*(?:\.\d+)?)\s*"
     r"(?P<unit>crores?|lakhs?|millions?|billions?|thousands?|%)?"
 )
-YEAR = r"(?:FY\s*)?\d{4}(?:\s*[-–/]\s*\d{2,4})?"
+YEAR = r"(?:FY\s*)?(?>(?:19|20|21)\d{2}(?:\s*[-–/]\s*\d{2,4})?)"
+VISUAL_INTENT_PATTERN = re.compile(
+    r"\b(?:compare|comparison|versus|vs\.?|trend|change|growth|year[- ]over[- ]year|"
+    r"yoy|segment|breakdown|distribution)\b",
+    re.IGNORECASE,
+)
 
 YEAR_FIRST_PATTERN = re.compile(
     rf"(?P<label>{YEAR})\s*(?:[:=\-–]|was|stood\s+at|reported)?\s*{AMOUNT}",
@@ -104,6 +109,11 @@ def _point_from_match(
 
     if not label or not raw_value:
         return None
+    # Bare numbers in annual-report prose are commonly years, page references,
+    # note numbers, or table coordinates.  They are unsafe chart inputs unless
+    # an explicit currency or unit gives them financial meaning.
+    if not currency and not unit:
+        return None
 
     value = float(raw_value)
     display_parts = [part for part in (currency, match.group("value"), unit) if part]
@@ -169,6 +179,8 @@ def build_visualization_spec(
     evidence: Iterable[dict[str, Any]],
 ) -> VisualizationSpec | None:
     """Return a safe chart specification, or None when evidence is insufficient."""
+    if not VISUAL_INTENT_PATTERN.search(question or ''):
+        return None
     points = _compatible_group(extract_financial_data(evidence))
     if len(points) < 2:
         return None

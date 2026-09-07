@@ -79,6 +79,58 @@ def source_excerpt_answer(results, reason=None):
     return f'{heading}\n\nOpen the source cards to read the original text. {refs}\n\n_No synthesized answer is being presented._'
 
 
+def extractive_grounded_answer(question, results, reason=None, max_sentences=4):
+    """Build a useful, citation-safe fallback from exact evidence sentences.
+
+    Small local models occasionally omit citations or alter a financial number.
+    In that case we prefer verbatim report sentences selected by question-term
+    overlap instead of replacing the answer with only a generic warning.
+    """
+    if not results:
+        return INSUFFICIENT
+
+    stop_words = {
+        'a', 'about', 'an', 'and', 'are', 'does', 'for', 'from', 'in', 'is',
+        'of', 'on', 'report', 'say', 'the', 'to', 'was', 'what', 'which',
+    }
+    query_terms = {
+        term for term in re.findall(r'[a-z0-9]+', (question or '').lower())
+        if len(term) > 2 and term not in stop_words
+    }
+    candidates = []
+    seen = set()
+    for position, result in enumerate(results, 1):
+        ref = evidence_id(result, position)
+        text = str(result.get(
+            'context_text', result.get('paragraph_text', result.get('text', ''))
+        )).strip()
+        for sentence_position, sentence in enumerate(
+            re.split(r'(?<=[.!?])\s+|\n+', text)
+        ):
+            sentence = re.sub(r'\s+', ' ', sentence).strip(' \t-')
+            if len(sentence) < 15 or sentence.casefold() in seen:
+                continue
+            seen.add(sentence.casefold())
+            sentence_terms = set(re.findall(r'[a-z0-9]+', sentence.lower()))
+            overlap = len(query_terms & sentence_terms)
+            contains_figure = bool(_numbers(sentence))
+            candidates.append((overlap, contains_figure, -position,
+                               -sentence_position, sentence, ref))
+
+    relevant = [item for item in candidates if item[0] > 0]
+    ranked = sorted(relevant or candidates, reverse=True)
+    selected = ranked[:max_sentences]
+    if not selected:
+        return source_excerpt_answer(results, reason)
+
+    heading = reason or (
+        'The answer model could not produce a fully validated draft, so these '
+        'most relevant statements are quoted directly from the report evidence:'
+    )
+    lines = [f'- {sentence} [{ref}]' for *_, sentence, ref in selected]
+    return heading + '\n\n' + '\n'.join(lines)
+
+
 def _numbers(text):
     # Keep signs and percent markers; commas are only grouping separators.
     return set(re.findall(r'(?<!\w)[+−-]?\d[\d,]*(?:\.\d+)?%?', text.replace('−', '-')))
@@ -110,13 +162,17 @@ def validate_answer(answer, results):
     return bool(re.search(r'\[E\d+\]', answer))
 
 
-def _checked(answer, used, all_results):
+def _checked(answer, used, all_results, question=''):
     if not answer.strip():
         raise GenerationError('The answer model returned an empty answer.')
     if validate_answer(answer, used):
         return answer.strip()
-    return source_excerpt_answer(all_results,
-        'The generated draft did not pass the citation/number checks. Review the source evidence instead.')
+    return extractive_grounded_answer(
+        question,
+        all_results,
+        'The generated draft did not pass the citation/number checks. '
+        'Showing exact statements from the retrieved report evidence instead:',
+    )
 
 
 def generate_grounded_answer(question, results, model_id, region):
@@ -140,7 +196,7 @@ def generate_grounded_answer(question, results, model_id, region):
         raise GenerationError('Amazon Bedrock is unavailable. Use source excerpts or check model access.') from error
     content = response.get('output', {}).get('message', {}).get('content', [])
     answer = '\n'.join(item['text'] for item in content if item.get('text'))
-    return _checked(answer, used, results)
+    return _checked(answer, used, results, question)
 
 
 def generate_local_answer(question, results, model_id):
@@ -160,4 +216,4 @@ def generate_local_answer(question, results, model_id):
         answer = tokenizer.decode(output_ids[0], skip_special_tokens=True).strip()
     except (ImportError, OSError, RuntimeError, ValueError) as error:
         raise GenerationError('The local model could not run. Use source excerpts or check the model installation.') from error
-    return _checked(answer, used, results)
+    return _checked(answer, used, results, question)
