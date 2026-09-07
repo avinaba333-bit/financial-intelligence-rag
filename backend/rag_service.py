@@ -79,7 +79,7 @@ def source_excerpt_answer(results, reason=None):
     return f'{heading}\n\nOpen the source cards to read the original text. {refs}\n\n_No synthesized answer is being presented._'
 
 
-def extractive_grounded_answer(question, results, reason=None, max_sentences=3):
+def extractive_grounded_answer(question, results, reason=None, max_sentences=2):
     """Build a useful, citation-safe fallback from exact evidence sentences.
 
     Small local models occasionally omit citations or alter a financial number.
@@ -112,11 +112,15 @@ def extractive_grounded_answer(question, results, reason=None, max_sentences=3):
         text = str(result.get(
             'context_text', result.get('paragraph_text', result.get('text', ''))
         )).strip()
+        # PDF extraction commonly inserts a newline in the middle of one
+        # sentence. Rejoin whitespace before sentence segmentation so answers
+        # do not end with fragments such as "increased ... from".
+        normalised_text = re.sub(r'\s+', ' ', text)
         for sentence_position, sentence in enumerate(
-            re.split(r'(?<=[.!?])\s+|\n+', text)
+            re.split(r'(?<=[.!?])\s+', normalised_text)
         ):
             sentence = re.sub(r'\s+', ' ', sentence).strip(' \t-')
-            if len(sentence) < 15 or sentence.casefold() in seen:
+            if len(sentence) < 15 or len(sentence) > 700 or sentence.casefold() in seen:
                 continue
             seen.add(sentence.casefold())
             sentence_lower = sentence.lower()
@@ -138,6 +142,11 @@ def extractive_grounded_answer(question, results, reason=None, max_sentences=3):
                 r'\b(?:is defined as|means|is profit for the year before)\b',
                 sentence_lower,
             ))
+            incomplete_ending = bool(re.search(
+                r'\b(?:and|at|by|for|from|in|of|on|the|to|with)\s*$',
+                sentence_lower,
+            ))
+            complete_sentence = sentence.endswith(('.', '!', '?'))
             starts_with_metric = any(
                 sentence_lower.startswith(phrase) for phrase in query_phrases
             )
@@ -147,14 +156,21 @@ def extractive_grounded_answer(question, results, reason=None, max_sentences=3):
                 + int(contains_figure) * 2
                 + int(financial_amount) * 5
                 + int(starts_with_metric) * 4
+                + int(complete_sentence) * 3
                 - int(legal_context) * 10
                 - int(definition_context) * 5
+                - int(incomplete_ending) * 8
             )
-            candidates.append((score, overlap, phrase_hits, financial_amount, -position,
-                               -sentence_position, sentence, ref))
+            candidates.append((score, overlap, phrase_hits, financial_amount,
+                                legal_context, -position,
+                                -sentence_position, sentence, ref))
 
     relevant = [item for item in candidates if item[1] > 0]
-    ranked = sorted(relevant or candidates, reverse=True)
+    # Once a non-legal financial answer is available, compliance references
+    # such as CSR percentages under a statutory section are distracting rather
+    # than explanatory evidence for a net-profit question.
+    non_legal_relevant = [item for item in relevant if not item[4]]
+    ranked = sorted(non_legal_relevant or relevant or candidates, reverse=True)
     selected = ranked[:max_sentences]
     if not selected:
         return source_excerpt_answer(results, reason)
