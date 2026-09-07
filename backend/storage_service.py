@@ -1,6 +1,6 @@
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import boto3
@@ -223,7 +223,9 @@ class S3Storage:
         sources = list(chunk_documents)
 
         for document in processed_documents:
-            processed_path = Path(document.key)
+            # S3 object keys always use POSIX separators, including when the
+            # application itself is running on Windows.
+            processed_path = PurePosixPath(document.key)
             expected_chunk_key = str(
                 processed_path.parent.parent
                 / "chunks"
