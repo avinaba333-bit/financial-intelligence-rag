@@ -20,7 +20,8 @@ def test_build_evidence_includes_source_page_and_text():
 import pytest
 from backend.rag_service import (INSUFFICIENT, validate_answer, select_evidence,
                                  generate_grounded_answer, generate_local_answer,
-                                 source_excerpt_answer, _checked)
+                                 source_excerpt_answer, extractive_grounded_answer,
+                                 _checked)
 
 
 def evidence():
@@ -76,7 +77,18 @@ def test_rejected_answer_is_not_shown_as_fact():
     answer = _checked('Profit was 9999. [E1]', evidence(), evidence())
     assert '9999' not in answer
     assert 'did not pass' in answer
-    assert 'No synthesized answer' in answer
+    assert 'Profit was Rs 1,250 crore. [E1]' in answer
+
+
+def test_extractive_fallback_selects_relevant_exact_sentences_with_citations():
+    results = evidence() + [{
+        'evidence_id': 'E2', 'source_file': 'report.pdf', 'page_number': 9,
+        'text': 'The bank opened several branches during the year.',
+        'paragraph_text': 'The bank opened several branches during the year.',
+    }]
+    answer = extractive_grounded_answer('What was the profit?', results)
+    assert 'Profit was Rs 1,250 crore. [E1]' in answer
+    assert '[E2]' not in answer
 
 
 def test_bedrock_prompt_and_citation_validation(monkeypatch):

@@ -77,6 +77,18 @@ def test_no_chart_is_created_for_only_one_value():
     assert build_visualization_spec("What was net profit?", evidence) is None
 
 
+def test_fact_question_does_not_chart_years_pages_or_unlabelled_numbers():
+    evidence = [{
+        "text": "FY 2025-26 annual report. Page 247. Net profit was INR 67,347.4 crore.",
+        "page_number": 247,
+        "source_file": "annual-report.pdf",
+    }]
+
+    assert build_visualization_spec("What does the report say about net profit?", evidence) is None
+    points = extract_financial_data(evidence)
+    assert all(point.display_value not in {"26", "247"} for point in points)
+
+
 def test_duplicate_evidence_values_are_removed():
     item = {
         "text": "Net profit was INR 1,250 crore.",
