@@ -5,6 +5,7 @@ from backend.embedding_service import (
     build_faiss_index,
     serialize_faiss_index,
 )
+from backend.chunk_service import generate_chunk_payload
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
 
@@ -35,20 +36,20 @@ storage = S3Storage(
 )
 
 try:
-    chunk_documents = storage.list_chunk_documents()
+    index_sources = storage.list_index_sources()
 except StorageError as error:
     st.error(str(error))
     st.stop()
 
-if not chunk_documents:
+if not index_sources:
     st.warning(
-        "No S3 chunk files were found. Generate chunks first."
+        "No processed reports or S3 chunk files were found. Upload a report first."
     )
     st.stop()
 
 selected_document = st.selectbox(
-    "Select an S3 chunk document",
-    options=chunk_documents,
+    "Select a processed report or S3 chunk document",
+    options=index_sources,
     format_func=lambda item: item.label,
 )
 
@@ -65,15 +66,27 @@ if st.button(
         with st.spinner(
             "Generating embeddings and building the FAISS index..."
         ):
-            chunk_payload = storage.download_json(
-                selected_document.key
-            )
+            source_payload = storage.download_json(selected_document.key)
+            source_key = selected_document.key
+
+            if "/processed/" in source_key:
+                chunk_payload, _ = generate_chunk_payload(source_payload)
+                key_parts = source_key.split("/")
+                company = key_parts[-4]
+                financial_year = key_parts[-3]
+                source_file = source_payload.get("source_file") or key_parts[-1]
+                source_key = storage.chunks_key(
+                    company, financial_year, source_file
+                )
+                storage.upload_json(chunk_payload, source_key)
+            else:
+                chunk_payload = source_payload
 
             chunks = chunk_payload.get("chunks", [])
 
             index, indexed_chunks = build_faiss_index(chunks)
 
-            key_parts = selected_document.key.split("/")
+            key_parts = source_key.split("/")
 
             company = key_parts[-4]
             financial_year = key_parts[-3]
@@ -102,7 +115,7 @@ if st.button(
                     "financial_year"
                 ),
                 "source_file": chunk_payload.get("source_file"),
-                "source_chunk_key": selected_document.key,
+                "source_chunk_key": source_key,
                 "embedding_model": DEFAULT_MODEL,
                 "embedding_dimension": index.d,
                 "total_vectors": index.ntotal,

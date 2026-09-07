@@ -209,6 +209,36 @@ class S3Storage:
             key=lambda item: item.key,
         )
 
+    def list_index_sources(self) -> list[S3Document]:
+        """List reports that can be indexed, preferring existing chunk files.
+
+        A newly uploaded report initially has only a ``processed`` JSON object.
+        Keeping those objects in this list lets the vector-index page generate
+        chunks on demand instead of hiding the report until the user visits the
+        chunk viewer first.
+        """
+        processed_documents = self.list_processed_documents()
+        chunk_documents = self.list_chunk_documents()
+        chunk_keys = {document.key for document in chunk_documents}
+        sources = list(chunk_documents)
+
+        for document in processed_documents:
+            processed_path = Path(document.key)
+            expected_chunk_key = str(
+                processed_path.parent.parent
+                / "chunks"
+                / f"{processed_path.stem}_chunks.json"
+            )
+            if expected_chunk_key not in chunk_keys:
+                sources.append(
+                    S3Document(
+                        key=document.key,
+                        label=f"S3 processed report (chunks generated automatically): {document.key}",
+                    )
+                )
+
+        return sorted(sources, key=lambda item: item.key)
+
     def list_vector_metadata(self) -> list[S3Document]:
         """List metadata files for FAISS indexes stored in S3."""
         prefix = self._key("") + "/"
