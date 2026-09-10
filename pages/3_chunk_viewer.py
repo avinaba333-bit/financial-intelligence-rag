@@ -10,7 +10,7 @@ from backend.chunk_service import (
 )
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
-from backend.ui import apply_style, show_excerpt
+from backend.ui import apply_style, hero, show_excerpt
 
 
 st.set_page_config(
@@ -19,14 +19,10 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Document Chunk Generator and Viewer")
 apply_style()
-
-st.write(
-    """
-    This page converts extracted annual-report text into overlapping,
-    page-aware chunks for semantic search and RAG processing.
-    """
+hero(
+    "Shape better evidence.",
+    "Create complete, page-aware retrieval passages while preserving their route back to the original filing.",
 )
 
 processed_directory = Path("data/processed")

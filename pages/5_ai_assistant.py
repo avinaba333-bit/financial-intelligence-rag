@@ -38,8 +38,8 @@ from config import (
 
 st.set_page_config(page_title='FinSight | Report assistant', page_icon='💬', layout='wide')
 apply_style()
-hero('Your reports. Clearer answers.',
-     'Explore financial reports with traceable evidence and the original PDF beside your conversation.')
+hero('Ask the filing. Trace the answer.',
+     'One focused answer, its original PDF evidence, and current web context when the question looks forward.')
 
 if not S3_BUCKET:
     st.info('Configure S3_BUCKET, upload a report, and build its vector index to start chatting.')

@@ -7,7 +7,7 @@ import streamlit as st
 from backend.pdf_processor import extract_pdf_pages
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_ENABLED, S3_PREFIX
-from backend.ui import apply_style, show_excerpt
+from backend.ui import apply_style, hero, show_excerpt
 
 
 st.set_page_config(
@@ -16,14 +16,10 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Upload Financial Reports")
 apply_style()
-
-st.write(
-    """
-    Upload annual reports for PDF processing. Files are always retained locally
-    and can also be stored in Amazon S3 for cloud-based RAG processing.
-    """
+hero(
+    "Build your research library.",
+    "Add annual reports, preserve the original PDF, and prepare page-aware text for analysis.",
 )
 
 

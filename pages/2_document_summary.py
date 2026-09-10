@@ -5,7 +5,7 @@ import streamlit as st
 
 from backend.storage_service import S3Storage, StorageError
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
-from backend.ui import apply_style, show_excerpt
+from backend.ui import apply_style, hero, show_excerpt
 
 
 st.set_page_config(
@@ -14,8 +14,11 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Processed Financial Documents")
 apply_style()
+hero(
+    "Read the filing at a glance.",
+    "Inspect report identity, page coverage, extracted content, and source structure before retrieval.",
+)
 
 processed_directory = Path("data/processed")
 

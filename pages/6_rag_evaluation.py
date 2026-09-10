@@ -6,6 +6,7 @@ import streamlit as st
 from backend.embedding_service import deserialize_faiss_index, search_faiss_index
 from backend.evaluation_service import evaluate_question, summarise_results
 from backend.storage_service import S3Storage, StorageError
+from backend.ui import apply_style, hero
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
 
 
@@ -15,10 +16,10 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("RAG Evaluation")
-st.write(
-    "Measure retrieval precision, recall, ranking quality and latency using "
-    "a labelled set of financial-report questions."
+apply_style()
+hero(
+    "Measure what the system retrieves.",
+    "Benchmark precision, recall, ranking quality, and latency against labelled financial-report questions.",
 )
 
 if not S3_BUCKET:

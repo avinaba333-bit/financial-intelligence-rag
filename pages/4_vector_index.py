@@ -7,6 +7,7 @@ from backend.embedding_service import (
 )
 from backend.chunk_service import generate_chunk_payload
 from backend.storage_service import S3Storage, StorageError
+from backend.ui import apply_style, hero
 from config import AWS_REGION, S3_BUCKET, S3_PREFIX
 
 
@@ -16,13 +17,10 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Financial Report Vector Index Builder")
-
-st.write(
-    """
-    Generate semantic embeddings from document chunks and create a
-    FAISS vector index for retrieval-augmented generation.
-    """
+apply_style()
+hero(
+    "Turn evidence into search.",
+    "Generate semantic embeddings and build the FAISS index that powers source-linked financial answers.",
 )
 
 if not S3_BUCKET:

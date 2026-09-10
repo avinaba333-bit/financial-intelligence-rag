@@ -14,9 +14,9 @@ st.set_page_config(
 def home_page():
     apply_style()
     hero(
-        'Financial research, with the evidence.',
-        'Turn annual reports into searchable knowledge. Read the answer, '
-        'inspect the source, and verify the original page.',
+        'Evidence before opinion.',
+        'A financial research desk that turns annual reports into concise, '
+        'source-linked answers you can verify.',
     )
 
     st.page_link(
@@ -25,7 +25,7 @@ def home_page():
         icon='💬',
     )
 
-    st.subheader('From annual report to cited answer')
+    st.subheader('Your research pipeline')
     for column, title, description, page in zip(
         st.columns(3),
         ['01 · Add reports', '02 · Prepare evidence', '03 · Ask & verify'],
