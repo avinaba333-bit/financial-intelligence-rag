@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide",
 )
 
-apply_style()
+apply_style('evaluation')
 hero(
     "RAG Quality Lab.",
     "Prove that FinSight retrieves the right financial evidence—not merely a similar paragraph.",

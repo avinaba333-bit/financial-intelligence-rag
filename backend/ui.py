@@ -10,7 +10,49 @@ BULLET_PATTERN = re.compile(r"^(?:[-•▪◦*]|\d+[.)])\s+")
 SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9₹$])")
 
 
-def apply_style():
+NAVIGATION_GROUPS = (
+    ('Overview', (('Home', 'home', '/', 'home'),)),
+    ('Document workspace', (
+        ('Upload reports', 'upload_file', '/upload_reports', 'upload'),
+        ('Document summary', 'description', '/document_summary', 'summary'),
+        ('Chunk viewer', 'view_cozy', '/chunk_viewer', 'chunks'),
+        ('Vector index', 'hub', '/vector_index', 'vectors'),
+    )),
+    ('Financial research', (
+        ('AI assistant', 'auto_awesome', '/ai_assistant', 'assistant'),
+        ('RAG evaluation', 'monitoring', '/rag_evaluation', 'evaluation'),
+    )),
+)
+
+
+def sidebar_navigation(active_page):
+    """Render the branded navigation after Streamlit selects a page."""
+    groups = []
+    for heading, links in NAVIGATION_GROUPS:
+        items = []
+        for label, icon, route, page_id in links:
+            active = ' is-active' if page_id == active_page else ''
+            current = ' aria-current="page"' if active else ''
+            items.append(
+                f'<a class="finsight-nav-link{active}" href="{route}" '
+                f'target="_self"{current}>'
+                f'<span class="material-symbols-rounded finsight-nav-icon" '
+                f'aria-hidden="true">{icon}</span>'
+                f'<span>{escape(label)}</span></a>'
+            )
+        groups.append(
+            '<section class="finsight-nav-group">'
+            f'<div class="finsight-nav-heading">{escape(heading)}</div>'
+            f'{"".join(items)}</section>'
+        )
+    st.sidebar.markdown(
+        f'<nav class="finsight-custom-nav" aria-label="Workspace">'
+        f'{"".join(groups)}</nav>',
+        unsafe_allow_html=True,
+    )
+
+
+def apply_style(active_page=None):
     st.markdown('''<style>
     :root {
       --finsight-ink: #07151c;
@@ -110,39 +152,58 @@ def apply_style():
       letter-spacing: .14em;
     }
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: .82rem;}
-    [data-testid="stSidebarNav"] {display: block !important;}
-    [data-testid="stSidebarNav"] ul {gap: .24rem;}
-    [data-testid="stSidebarNav"] li {margin-bottom: .2rem;}
-    [data-testid="stSidebarNav"] a {
-      min-height: 2.7rem;
-      padding: .58rem .72rem !important;
+    [data-testid="stSidebarNav"] {display: none !important;}
+    .finsight-custom-nav {margin: .75rem 0 .35rem;}
+    .finsight-nav-group {margin-bottom: 1.15rem;}
+    .finsight-nav-heading {
+      margin: 0 .7rem .42rem;
+      color: color-mix(in srgb, var(--text-color) 58%, transparent);
+      font-size: .67rem;
+      font-weight: 850;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .finsight-nav-link {
+      display: flex;
+      align-items: center;
+      gap: .72rem;
+      min-height: 2.75rem;
+      margin: .15rem 0;
+      padding: .6rem .72rem;
       border: 1px solid transparent;
       border-radius: 11px;
+      color: var(--text-color) !important;
+      font-size: .94rem;
+      font-weight: 720;
+      letter-spacing: .006em;
+      line-height: 1.25;
+      text-decoration: none !important;
       transition: background .16s ease, border-color .16s ease, transform .16s ease;
     }
-    [data-testid="stSidebarNav"] a:hover {
+    .finsight-nav-link:hover {
       border-color: var(--finsight-line);
       background: var(--finsight-soft);
       transform: translateX(3px);
     }
-    [data-testid="stSidebarNav"] a p,
-    [data-testid="stSidebarNav"] a span:not([data-testid="stIconMaterial"]) {
-      font-size: .94rem !important;
-      font-weight: 720 !important;
-      letter-spacing: .006em !important;
-      line-height: 1.25 !important;
+    .finsight-nav-link.is-active {
+      border-color: rgba(126,174,166,.2);
+      background: linear-gradient(90deg, rgba(73,216,180,.18), rgba(73,216,180,.06));
+      box-shadow: inset 3px 0 0 var(--finsight-mint);
     }
-    [data-testid="stSidebarNav"] a [data-testid="stIconMaterial"] {
+    .finsight-nav-icon {
+      width: 1.35rem;
+      flex: 0 0 1.35rem;
       color: var(--finsight-mint) !important;
-      font-size: 1.28rem !important;
-    }
-    [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"],
-    [data-testid="stSidebarNav"] header {
-      color: color-mix(in srgb, var(--text-color) 55%, transparent) !important;
-      font-size: .68rem !important;
-      font-weight: 850 !important;
-      letter-spacing: .13em !important;
-      text-transform: uppercase;
+      font-family: "Material Symbols Rounded", "Material Symbols Outlined";
+      font-size: 1.28rem;
+      font-weight: 400;
+      font-style: normal;
+      line-height: 1;
+      letter-spacing: normal;
+      white-space: nowrap;
+      direction: ltr;
+      font-feature-settings: "liga";
+      -webkit-font-feature-settings: "liga";
     }
     [data-testid="stSidebar"] label p,
     [data-testid="stSidebar"] button p {
@@ -403,6 +464,8 @@ def apply_style():
       [data-testid="stFormSubmitButton"] > button {transition: none;}
     }
     </style>''', unsafe_allow_html=True)
+    if active_page:
+        sidebar_navigation(active_page)
 
 
 def hero(title, subtitle):

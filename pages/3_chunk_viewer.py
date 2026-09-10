@@ -19,7 +19,7 @@ st.set_page_config(
     layout="wide",
 )
 
-apply_style()
+apply_style('chunks')
 hero(
     "Shape better evidence.",
     "Create complete, page-aware retrieval passages while preserving their route back to the original filing.",

@@ -16,7 +16,7 @@ st.set_page_config(
     layout="wide",
 )
 
-apply_style()
+apply_style('upload')
 hero(
     "Build your research library.",
     "Add annual reports, preserve the original PDF, and prepare page-aware text for analysis.",

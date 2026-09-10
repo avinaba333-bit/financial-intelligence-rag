@@ -14,7 +14,7 @@ st.set_page_config(
     layout="wide",
 )
 
-apply_style()
+apply_style('summary')
 hero(
     "Read the filing at a glance.",
     "Inspect report identity, page coverage, extracted content, and source structure before retrieval.",

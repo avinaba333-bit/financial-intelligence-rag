@@ -37,7 +37,7 @@ from config import (
 )
 
 st.set_page_config(page_title='FinSight | Report assistant', page_icon='💬', layout='wide')
-apply_style()
+apply_style('assistant')
 hero('Ask the filing. Trace the answer.',
      'One focused answer, its original PDF evidence, and current web context when the question looks forward.')
 

@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide",
 )
 
-apply_style()
+apply_style('vectors')
 hero(
     "Turn evidence into search.",
     "Generate semantic embeddings and build the FAISS index that powers source-linked financial answers.",

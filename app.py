@@ -12,7 +12,7 @@ st.set_page_config(
 
 
 def home_page():
-    apply_style()
+    apply_style('home')
     hero(
         'Evidence before opinion.',
         'A financial research desk that turns annual reports into concise, '
@@ -89,5 +89,8 @@ pages = {
     ],
 }
 
-navigation = st.navigation(pages, position='sidebar', expanded=True)
+# The branded navigation is rendered by ``apply_style`` inside every selected
+# page. Hiding Streamlit's built-in navigation prevents a second plain menu
+# from appearing above it in production.
+navigation = st.navigation(pages, position='hidden')
 navigation.run()
