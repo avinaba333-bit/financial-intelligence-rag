@@ -101,18 +101,30 @@ def apply_style():
         color-mix(in srgb, var(--secondary-background-color) 96%, var(--finsight-ink));
     }
     [data-testid="stSidebar"]::before {
-      content: "FINSIGHT  /  RESEARCH DESK";
+      content: "◈  FINSIGHT  /  RESEARCH DESK";
       display: block;
       margin: 1.4rem 1.15rem .35rem;
       color: var(--finsight-mint);
-      font-size: .7rem;
+      font-size: .72rem;
       font-weight: 800;
       letter-spacing: .14em;
     }
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: .82rem;}
     [data-testid="stSidebarNav"] ul {gap: .22rem;}
     [data-testid="stSidebarNav"] li {margin-bottom: .18rem;}
-    [data-testid="stSidebarNav"] span {line-height: 1.45;}
+    [data-testid="stSidebarNav"] span {
+      line-height: 1.45;
+      font-size: .88rem;
+      font-weight: 640;
+      letter-spacing: .005em;
+    }
+    [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"] {
+      color: color-mix(in srgb, var(--text-color) 58%, transparent);
+      font-size: .67rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
     [data-testid="stSidebarNav"] a {
       border: 1px solid transparent;
       border-radius: 10px;
@@ -266,6 +278,43 @@ def apply_style():
     .finsight-excerpt li {margin: .25rem 0;}
     .finsight-excerpt mark {background: #ffedaa; color: #192733; border-radius: 3px;
       padding: 0 .08rem;}
+    .finsight-report-card {
+      position: relative;
+      overflow: hidden;
+      margin: 1rem 0 .4rem;
+      padding: 1rem;
+      border: 1px solid var(--finsight-line);
+      border-radius: 18px;
+      background:
+        radial-gradient(circle at 90% 8%, rgba(241,185,79,.14), transparent 7rem),
+        linear-gradient(145deg, rgba(73,216,180,.10), rgba(7,21,28,.08));
+      box-shadow: 0 15px 38px rgba(2,16,22,.11);
+    }
+    .finsight-report-art {display: block; width: 100%; height: 118px; margin-bottom: .8rem;}
+    .finsight-report-eyebrow {
+      color: var(--finsight-mint);
+      font-size: .65rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .finsight-report-card h4 {font-size: 1rem; margin: .3rem 0 .2rem; line-height: 1.25;}
+    .finsight-report-file {
+      margin: 0 0 .75rem;
+      color: color-mix(in srgb, var(--text-color) 66%, transparent);
+      font-size: .72rem;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+    .finsight-report-meta {display: flex; gap: .45rem; flex-wrap: wrap;}
+    .finsight-report-meta span {
+      padding: .28rem .48rem;
+      border: 1px solid var(--finsight-line);
+      border-radius: 999px;
+      background: rgba(73,216,180,.07);
+      font-size: .67rem;
+      font-weight: 700;
+    }
     @media (max-width: 900px) {
       .block-container {padding: 1rem 1rem 2.5rem;}
       [data-testid="stHorizontalBlock"] {gap: .8rem;}
@@ -294,6 +343,50 @@ def apply_style():
 def hero(title, subtitle):
     st.markdown(f'<section class="finsight-hero"><div class="finsight-kicker">FINSIGHT / FINANCIAL RESEARCH</div>'
                 f'<h1>{escape(title)}</h1><p>{escape(subtitle)}</p></section>', unsafe_allow_html=True)
+
+
+def sidebar_report_card(company, financial_year, source_file, page_count, passage_count):
+    """Add a compact visual identity card for the active annual report."""
+    safe_company = escape(str(company or 'Selected company'))
+    safe_year = escape(str(financial_year or 'Year not specified'))
+    safe_file = escape(str(source_file or 'Annual report PDF'))
+    safe_pages = escape(str(page_count or '—'))
+    safe_passages = escape(str(passage_count or '—'))
+    st.sidebar.markdown(
+        f'''<section class="finsight-report-card">
+        <svg class="finsight-report-art" viewBox="0 0 260 118" role="img"
+             aria-label="Annual report with financial chart">
+          <defs>
+            <linearGradient id="reportSheet" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#123846"/><stop offset="1" stop-color="#0a2029"/>
+            </linearGradient>
+            <linearGradient id="chartLine" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#49d8b4"/><stop offset="1" stop-color="#f1b94f"/>
+            </linearGradient>
+          </defs>
+          <rect x="43" y="8" width="126" height="100" rx="10" fill="url(#reportSheet)"
+                stroke="#3a756f"/>
+          <path d="M145 8v24h24" fill="#173f49" stroke="#3a756f"/>
+          <rect x="58" y="27" width="51" height="5" rx="2.5" fill="#49d8b4" opacity=".8"/>
+          <rect x="58" y="39" width="82" height="3" rx="1.5" fill="#76918f" opacity=".55"/>
+          <rect x="58" y="47" width="68" height="3" rx="1.5" fill="#76918f" opacity=".42"/>
+          <rect x="58" y="72" width="12" height="20" rx="3" fill="#1c7466"/>
+          <rect x="77" y="62" width="12" height="30" rx="3" fill="#2a9f88"/>
+          <rect x="96" y="51" width="12" height="41" rx="3" fill="#49d8b4"/>
+          <circle cx="184" cy="70" r="32" fill="#0b2630" stroke="#34665f"/>
+          <path d="M166 82l12-15 10 7 16-22" fill="none" stroke="url(#chartLine)"
+                stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="204" cy="52" r="4" fill="#f1b94f"/>
+        </svg>
+        <div class="finsight-report-eyebrow">Active annual report</div>
+        <h4>{safe_company}</h4>
+        <p class="finsight-report-file">{safe_file}</p>
+        <div class="finsight-report-meta">
+          <span>FY {safe_year}</span><span>{safe_pages} pages</span><span>{safe_passages} passages</span>
+        </div>
+        </section>''',
+        unsafe_allow_html=True,
+    )
 
 
 def _join_pdf_lines(lines):

@@ -22,7 +22,7 @@ from backend.research_planning_service import (
 )
 from backend.retrieval_service import KeywordIndex, fuse_results, rerank_results
 from backend.storage_service import S3Storage, StorageError
-from backend.ui import apply_style, hero, readable_report_label
+from backend.ui import apply_style, hero, readable_report_label, sidebar_report_card
 from backend.web_research_service import WebResearchError, search_current_web
 from config import (
     AWS_REGION,
@@ -138,6 +138,15 @@ identity = (selected.key, metadata.get('document_id'), index.ntotal, metadata.ge
 if st.session_state.get('loaded_report_identity') != identity:
     clear_chat()
     st.session_state.loaded_report_identity = identity
+
+page_count = len({chunk.get('page_number') for chunk in chunks if chunk.get('page_number')})
+sidebar_report_card(
+    metadata.get('company'),
+    metadata.get('financial_year'),
+    metadata.get('source_file'),
+    page_count,
+    index.ntotal,
+)
 
 c1, c2, c3 = st.columns(3)
 c1.metric('Company', metadata.get('company') or 'Not specified')

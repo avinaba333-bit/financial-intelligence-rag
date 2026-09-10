@@ -155,6 +155,10 @@ def test_selected_company_appears_in_suggested_questions(fake_reports):
     labels = [item.label for item in at.button]
     assert "Where is Example Bank investing for future growth?" in labels
     assert "How could Example Bank grow over the next three years?" in labels
+    rendered = '\n'.join(markdown.value for markdown in at.markdown)
+    assert 'Active annual report' in rendered
+    assert 'Example Bank' in rendered
+    assert '1 pages' in rendered
 
 
 def test_landing_page_has_working_navigation():

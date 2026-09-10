@@ -73,43 +73,36 @@ pages = {
     'Overview': [
         st.Page(
             home_page,
-            title='Home',
-            icon='🏠',
+            title='⌂  Home',
             default=True,
         ),
     ],
     'Document workspace': [
         st.Page(
             'pages/1_upload_reports.py',
-            title='Upload reports',
-            icon='📤',
+            title='↥  Upload reports',
         ),
         st.Page(
             'pages/2_document_summary.py',
-            title='Document summary',
-            icon='📑',
+            title='▤  Document summary',
         ),
         st.Page(
             'pages/3_chunk_viewer.py',
-            title='Chunk viewer',
-            icon='🧩',
+            title='◫  Chunk viewer',
         ),
         st.Page(
             'pages/4_vector_index.py',
-            title='Vector index',
-            icon='🔍',
+            title='◈  Vector index',
         ),
     ],
     'Financial research': [
         st.Page(
             'pages/5_ai_assistant.py',
-            title='AI assistant',
-            icon='💬',
+            title='✦  AI assistant',
         ),
         st.Page(
             'pages/6_rag_evaluation.py',
-            title='RAG evaluation',
-            icon='📊',
+            title='◎  RAG evaluation',
         ),
     ],
 }
