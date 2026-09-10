@@ -69,43 +69,43 @@ def home_page():
     )
 
 
+home = st.Page(home_page, title='Home', icon=':material/home:', default=True)
+upload = st.Page('pages/1_upload_reports.py', title='Upload reports', icon=':material/upload_file:')
+summary = st.Page('pages/2_document_summary.py', title='Document summary', icon=':material/description:')
+chunks = st.Page('pages/3_chunk_viewer.py', title='Chunk viewer', icon=':material/view_cozy:')
+vectors = st.Page('pages/4_vector_index.py', title='Vector index', icon=':material/hub:')
+assistant = st.Page('pages/5_ai_assistant.py', title='AI assistant', icon=':material/auto_awesome:')
+evaluation = st.Page('pages/6_rag_evaluation.py', title='RAG evaluation', icon=':material/monitoring:')
+
 pages = {
     'Overview': [
-        st.Page(
-            home_page,
-            title='⌂  Home',
-            default=True,
-        ),
+        home,
     ],
     'Document workspace': [
-        st.Page(
-            'pages/1_upload_reports.py',
-            title='↥  Upload reports',
-        ),
-        st.Page(
-            'pages/2_document_summary.py',
-            title='▤  Document summary',
-        ),
-        st.Page(
-            'pages/3_chunk_viewer.py',
-            title='◫  Chunk viewer',
-        ),
-        st.Page(
-            'pages/4_vector_index.py',
-            title='◈  Vector index',
-        ),
+        upload, summary, chunks, vectors,
     ],
     'Financial research': [
-        st.Page(
-            'pages/5_ai_assistant.py',
-            title='✦  AI assistant',
-        ),
-        st.Page(
-            'pages/6_rag_evaluation.py',
-            title='◎  RAG evaluation',
-        ),
+        assistant, evaluation,
     ],
 }
 
 navigation = st.navigation(pages, position='sidebar', expanded=True)
+
+
+def sidebar_navigation():
+    """Render stable branded navigation instead of filename-derived labels."""
+    with st.sidebar:
+        st.markdown('<div class="finsight-nav-group">Overview</div>', unsafe_allow_html=True)
+        st.page_link(home, label='Home', icon=':material/home:')
+        st.markdown('<div class="finsight-nav-group">Document workspace</div>', unsafe_allow_html=True)
+        st.page_link(upload, label='Upload reports', icon=':material/upload_file:')
+        st.page_link(summary, label='Document summary', icon=':material/description:')
+        st.page_link(chunks, label='Chunk viewer', icon=':material/view_cozy:')
+        st.page_link(vectors, label='Vector index', icon=':material/hub:')
+        st.markdown('<div class="finsight-nav-group">Financial research</div>', unsafe_allow_html=True)
+        st.page_link(assistant, label='AI assistant', icon=':material/auto_awesome:')
+        st.page_link(evaluation, label='RAG evaluation', icon=':material/monitoring:')
+
+
+sidebar_navigation()
 navigation.run()

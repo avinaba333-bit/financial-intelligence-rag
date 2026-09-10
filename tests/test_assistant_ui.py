@@ -164,4 +164,9 @@ def test_selected_company_appears_in_suggested_questions(fake_reports):
 def test_landing_page_has_working_navigation():
     at = AppTest.from_file(str(ROOT / 'app.py'), default_timeout=15).run()
     assert not at.exception
-    assert len(at.get('page_link')) == 4
+    labels = [link.label for link in at.get('page_link')]
+    assert len(labels) == 11
+    assert set([
+        'Home', 'Upload reports', 'Document summary', 'Chunk viewer',
+        'Vector index', 'AI assistant', 'RAG evaluation',
+    ]).issubset(labels)

@@ -110,30 +110,44 @@ def apply_style():
       letter-spacing: .14em;
     }
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: .82rem;}
-    [data-testid="stSidebarNav"] ul {gap: .22rem;}
-    [data-testid="stSidebarNav"] li {margin-bottom: .18rem;}
-    [data-testid="stSidebarNav"] span {
-      line-height: 1.45;
-      font-size: .88rem;
-      font-weight: 640;
-      letter-spacing: .005em;
-    }
-    [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"] {
-      color: color-mix(in srgb, var(--text-color) 58%, transparent);
-      font-size: .67rem;
-      font-weight: 800;
-      letter-spacing: .12em;
+    /* The default navigation uses filename labels and changes markup between
+       Streamlit versions. FinSight renders stable page links below instead. */
+    [data-testid="stSidebarNav"] {display: none !important;}
+    .finsight-nav-group {
+      margin: .95rem 0 .28rem;
+      color: color-mix(in srgb, var(--text-color) 55%, transparent);
+      font-size: .68rem;
+      font-weight: 850;
+      letter-spacing: .13em;
       text-transform: uppercase;
     }
-    [data-testid="stSidebarNav"] a {
+    [data-testid="stSidebar"] [data-testid="stPageLink"] {margin-bottom: .2rem;}
+    [data-testid="stSidebar"] [data-testid="stPageLink"] a {
+      min-height: 2.7rem;
+      padding: .58rem .72rem !important;
       border: 1px solid transparent;
-      border-radius: 10px;
+      border-radius: 11px;
       transition: background .16s ease, border-color .16s ease, transform .16s ease;
     }
-    [data-testid="stSidebarNav"] a:hover {
+    [data-testid="stSidebar"] [data-testid="stPageLink"] a:hover {
       border-color: var(--finsight-line);
       background: var(--finsight-soft);
-      transform: translateX(2px);
+      transform: translateX(3px);
+    }
+    [data-testid="stSidebar"] [data-testid="stPageLink"] p {
+      font-size: .94rem !important;
+      font-weight: 720 !important;
+      letter-spacing: .006em !important;
+      line-height: 1.25 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stPageLink"] [data-testid="stIconMaterial"] {
+      color: var(--finsight-mint) !important;
+      font-size: 1.28rem !important;
+    }
+    [data-testid="stSidebar"] label p,
+    [data-testid="stSidebar"] button p {
+      font-size: .84rem !important;
+      font-weight: 650 !important;
     }
     [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"],
     [data-testid="stSidebarCollapsedControl"] [data-testid="stIconMaterial"] {
