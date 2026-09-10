@@ -82,11 +82,11 @@ def test_chat_evidence_pdf_preview_and_report_switch(fake_reports):
     assert len(at.chat_message) == 2
     assert 'Source excerpts' in at.session_state['messages'][-1]['content']
     assert at.session_state['messages'][-1]['evidence'][0]['paragraph_text'].endswith('Consolidated results.')
-    button(at, 'Show original page').click().run()
+    button(at, 'View PDF evidence').click().run()
     assert not at.exception
     assert len(at.get('image')) == 1
-    # On rerun the same source buttons must have stable keys and keep history.
-    button(at, 'E1 · PDF page 1 — Open original').click().run()
+    # On rerun the same source selector must have a stable key and keep history.
+    button(at, 'E1 · Page 1').click().run()
     assert not at.exception
     assert len(at.chat_message) == 2
     at.selectbox[0].select_index(1).run()
@@ -143,9 +143,11 @@ def test_future_question_keeps_report_and_web_answers_separate(fake_reports, mon
     assert response['web_research']['sources'][0]['evidence_id'] == 'W1'
     assert all(source['evidence_id'].startswith('E') for source in response['evidence'])
     rendered = '\n'.join(markdown.value for markdown in at.markdown)
-    assert 'Uploaded report evidence answer' in rendered
-    assert 'Current web research answer' in rendered
+    assert 'Report answer' in rendered
+    assert 'Latest web answer' in rendered
     assert '[W1]' in rendered
+    assert 'Sources: example.com' in '\n'.join(caption.value for caption in at.caption)
+    assert any(item.label == 'View website sources' for item in at.button)
 
 
 def test_selected_company_appears_in_suggested_questions(fake_reports):

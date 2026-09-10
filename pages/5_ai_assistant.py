@@ -22,7 +22,7 @@ from backend.research_planning_service import (
 )
 from backend.retrieval_service import KeywordIndex, fuse_results, rerank_results
 from backend.storage_service import S3Storage, StorageError
-from backend.ui import apply_style, hero, readable_report_label, show_excerpt
+from backend.ui import apply_style, hero, readable_report_label
 from backend.web_research_service import WebResearchError, search_current_web
 from config import (
     AWS_REGION,
@@ -149,85 +149,62 @@ if metadata.get('schema_version', 1) < 2:
 st.caption('Citations use physical PDF pages; printed page labels may differ. Always verify figures against the original page.')
 
 
+def _raw_pdf_key():
+    raw_key = metadata.get('storage', {}).get('raw_s3_key')
+    if raw_key:
+        return raw_key
+    base = selected.key.rsplit('/vector-store/', 1)[0]
+    source = metadata.get('source_file')
+    if not source or '/vector-store/' not in selected.key:
+        raise ValueError('The original PDF location is missing. Re-upload and reindex this report.')
+    return base + '/raw/' + PurePosixPath(source).name
+
+
 def show_sources(results, message_number):
-    with st.expander(f'Source evidence · {len(results)} blocks', expanded=False):
-        if not results:
-            st.info('No source evidence was retrieved for this question.')
-            return
+    """Show an original cited PDF page only after an explicit click."""
+    if not results:
+        return
+    visible_key = f'evidence-visible-{message_number}'
+    label = 'Hide PDF evidence' if st.session_state.get(visible_key) else 'View PDF evidence'
+    if st.button(label, key=f'toggle-evidence-{message_number}', icon='📄'):
+        st.session_state[visible_key] = not st.session_state.get(visible_key, False)
+    if not st.session_state.get(visible_key):
+        return
 
-        selector_key = f'selected-source-{message_number}'
-        available_ids = [result['evidence_id'] for result in results]
-        if st.session_state.get(selector_key) not in available_ids:
-            st.session_state[selector_key] = available_ids[0]
-
-        st.caption(
-            'Select a source page below. One evidence paragraph is shown at a '
-            'time so that its report and page citation remain clear.'
-        )
-        source_columns = st.columns(min(len(results), 5))
-        for position, result in enumerate(results):
-            evidence_id = result['evidence_id']
-            page = result.get('page_number', '?')
-            selected_now = st.session_state[selector_key] == evidence_id
-            if source_columns[position % len(source_columns)].button(
-                f'{evidence_id} · Page {page}',
-                key=f'pick-source-{message_number}-{evidence_id}',
-                type='primary' if selected_now else 'secondary',
-                width='stretch',
-            ):
-                st.session_state[selector_key] = evidence_id
-                st.session_state.pop('pdf_preview_key', None)
-
-        selected_result = next(
-            result
-            for result in results
-            if result['evidence_id'] == st.session_state[selector_key]
-        )
-        evidence_id = selected_result['evidence_id']
-        page = selected_result.get('page_number', '?')
-        source_file = selected_result.get('source_file', 'Report')
-        financial_year = selected_result.get('financial_year') or 'Year not specified'
-
-        st.markdown(f'#### {evidence_id} · PDF page {page}')
-        st.caption(f'{source_file} · {financial_year}')
-        parent = selected_result.get(
-            'paragraph_text',
-            selected_result.get('text', ''),
-        )
-        matched = (
-            selected_result.get('text', '')
-            if parent != selected_result.get('text')
-            else ''
-        )
-        show_excerpt(parent, matched)
-
-        label = f'{evidence_id} · PDF page {page} — Open original'
-        if st.button(
-            label,
-            key=f'source-{message_number}-{evidence_id}',
+    selector_key = f'selected-source-{message_number}'
+    available_ids = [result['evidence_id'] for result in results]
+    if st.session_state.get(selector_key) not in available_ids:
+        st.session_state[selector_key] = available_ids[0]
+    source_columns = st.columns(min(len(results), 5))
+    for position, result in enumerate(results):
+        evidence_id = result['evidence_id']
+        page = result.get('page_number', '?')
+        if source_columns[position % len(source_columns)].button(
+            f'{evidence_id} · Page {page}',
+            key=f'pick-source-{message_number}-{evidence_id}',
+            type='primary' if st.session_state[selector_key] == evidence_id else 'secondary',
             width='stretch',
         ):
-            st.session_state.active_evidence = selected_result
+            st.session_state[selector_key] = evidence_id
 
-        with st.expander('Search details'):
-            detail1, detail2, detail3 = st.columns(3)
-            detail1.metric(
-                'Semantic similarity',
-                f"{selected_result.get('similarity_score', 0):.3f}",
+    active = next(result for result in results
+                  if result['evidence_id'] == st.session_state[selector_key])
+    try:
+        with st.spinner('Opening cited PDF page…'):
+            pdf_bytes = load_pdf(S3_BUCKET, AWS_REGION, S3_PREFIX, _raw_pdf_key())
+            boxes = [active['bbox']] if active.get('bbox') else []
+            png = render_evidence_page(
+                pdf_bytes, int(active['page_number']), boxes, active.get('pdf_sha256')
             )
-            detail2.metric(
-                'Keyword score',
-                f"{selected_result.get('keyword_score', 0):.3f}",
-            )
-            rerank_score = selected_result.get('rerank_score')
-            detail3.metric(
-                'Reranker score',
-                f'{rerank_score:.3f}' if rerank_score is not None else 'Not used',
-            )
-            st.caption(
-                'Ranking scores help order search results. They are not '
-                'confidence or factual-accuracy percentages.'
-            )
+        st.image(
+            png,
+            caption=f"{active.get('source_file', 'Report')} · PDF page {active.get('page_number')}",
+            width='stretch',
+        )
+    except StorageError:
+        st.warning('The original PDF is unavailable. Check its S3 location or upload it again.')
+    except (ValueError, RuntimeError, OSError) as error:
+        st.warning(str(error))
 
 
 def show_financial_visualization(question, results, chart_key):
@@ -246,7 +223,7 @@ def show_financial_visualization(question, results, chart_key):
         # numbers.  Comparable series are rendered only after validation.
         return
 
-    with st.expander('Financial visualization', expanded=True):
+    with st.expander('View financial chart', expanded=False):
         metric_points = spec.points[:4]
         metric_columns = st.columns(len(metric_points))
         for column, point in zip(metric_columns, metric_points):
@@ -268,13 +245,9 @@ def show_financial_visualization(question, results, chart_key):
             )
 
 
-def show_web_research(web_research, web_error=None):
+def show_web_research(web_research, message_number, web_error=None):
     """Render web material in its own namespace and source section."""
-    st.markdown('#### Current web research answer')
-    st.caption(
-        'Independent live-web path · W-citations are web sources and are never '
-        'used as uploaded-report evidence.'
-    )
+    st.markdown('#### Latest web answer')
     if web_error:
         st.warning(web_error)
         return
@@ -284,22 +257,20 @@ def show_web_research(web_research, web_error=None):
 
     st.write(web_research.get('answer', ''))
     sources = web_research.get('sources', [])
-    st.caption(f"Searched at {web_research.get('searched_at', 'unknown time')} · {len(sources)} sources")
     if not sources:
         return
 
-    with st.expander(f'Web sources · {len(sources)} links', expanded=False):
+    domains = list(dict.fromkeys(source.get('domain', '') for source in sources if source.get('domain')))
+    if domains:
+        st.caption('Sources: ' + ' · '.join(domains))
+    visible_key = f'web-sources-visible-{message_number}'
+    label = 'Hide website sources' if st.session_state.get(visible_key) else 'View website sources'
+    if st.button(label, key=f'toggle-web-sources-{message_number}', icon='🔗'):
+        st.session_state[visible_key] = not st.session_state.get(visible_key, False)
+    if st.session_state.get(visible_key):
         for source in sources:
-            st.markdown(f"**{source.get('evidence_id', 'W?')}**")
-            st.write(source.get('title') or source.get('domain') or 'Web source')
-            st.caption(
-                ' · '.join(
-                    part for part in [source.get('domain'), source.get('published')] if part
-                )
-            )
-            st.write(source.get('summary', ''))
             st.link_button(
-                f"Open {source.get('evidence_id', 'web source')}",
+                f"{source.get('evidence_id', 'W?')} · {source.get('title') or source.get('domain') or 'Open source'}",
                 source['url'],
                 width='stretch',
             )
@@ -307,7 +278,7 @@ def show_web_research(web_research, web_error=None):
 
 def show_assistant_response(message, message_number):
     """Keep report and web answers visibly separate on current and historic turns."""
-    st.markdown('#### Uploaded report evidence answer')
+    st.markdown('#### Report answer')
     st.markdown(message['content'])
     if message.get('evidence') and message.get('question'):
         show_financial_visualization(
@@ -318,19 +289,23 @@ def show_assistant_response(message, message_number):
     if message.get('evidence'):
         show_sources(message['evidence'], message_number)
     if message.get('web_research') or message.get('web_error'):
-        show_web_research(message.get('web_research'), message.get('web_error'))
+        show_web_research(message.get('web_research'), message_number, message.get('web_error'))
 
 
-conversation, reference = st.columns([1.15, 1], gap='large')
+def show_message(message, position):
+    avatar = '👤' if message['role'] == 'user' else '🤖'
+    with st.chat_message(message['role'], avatar=avatar):
+        if message['role'] == 'assistant':
+            show_assistant_response(message, position)
+        else:
+            st.markdown(message['content'])
+
+
+conversation = st.container()
 with conversation:
-    st.subheader('Report conversation')
-    st.markdown('#### Ask your own question')
-    st.caption(
-        'Type a question about a metric, business segment, financial year, '
-        'comparison, or risk in the selected report.'
-    )
+    st.subheader('Ask about this company')
     question = st.chat_input(
-        'Type your financial-report question here…',
+        'Ask a report, growth, investment or future outlook question…',
         key='manual-report-question',
     )
 
@@ -348,14 +323,20 @@ with conversation:
         for sample in samples:
             if st.button(sample, key=sample, width='stretch'):
                 suggested = sample
-    for n, message in enumerate(st.session_state.messages):
-        avatar = '👤' if message['role'] == 'user' else '🤖'
-        with st.chat_message(message['role'], avatar=avatar):
-            if message['role'] == 'assistant':
-                show_assistant_response(message, n)
-            else:
-                st.markdown(message['content'])
     question = question or suggested
+    existing_messages = st.session_state.messages
+    # While a new answer is being prepared, every older exchange belongs in
+    # collapsed history. Otherwise keep only the most recent exchange visible.
+    history_messages = existing_messages if question else existing_messages[:-2]
+    latest_messages = [] if question else existing_messages[-2:]
+    if history_messages:
+        previous_count = sum(message['role'] == 'user' for message in history_messages)
+        with st.expander(f'Previous questions · {previous_count}', expanded=False):
+            for n, message in enumerate(history_messages):
+                show_message(message, n)
+    for n, message in enumerate(latest_messages, start=len(history_messages)):
+        show_message(message, n)
+
     if question:
         st.session_state.messages.append({'role': 'user', 'content': question})
         with st.chat_message('user', avatar='👤'):
@@ -425,53 +406,10 @@ with conversation:
                     'web_error': web_error,
                 }
                 show_assistant_response(response_message, message_number)
-                if results:
-                    st.session_state.active_evidence = results[0]
-                else:
-                    st.session_state.pop('active_evidence', None)
                 st.session_state.messages.append(response_message)
             except (ImportError, StorageError, ValueError, RuntimeError, OSError):
                 error_message = 'Search could not complete. Check the embedding model installation and index, then try again.'
                 st.error(error_message)
                 st.session_state.messages.append({'role': 'assistant', 'content': error_message})
 
-with reference:
-    st.subheader('Original PDF reference')
-    active = st.session_state.get('active_evidence')
-    if not active:
-        st.info('Ask a question, then open a source card to inspect the original PDF page.')
-    else:
-        st.caption(f"{active['evidence_id']} · {active.get('source_file')} · PDF page {active.get('page_number')}")
-        # Load the original only on explicit request to avoid downloading large
-        # reports for every chat turn. Changing the selected source clears preview.
-        preview_key = f"{selected.key}:{active.get('page_number')}:{active.get('paragraph_id', active.get('chunk_id'))}"
-        if st.button('Show original page', key='show-page'):
-            st.session_state.pdf_preview_key = preview_key
-        if st.session_state.get('pdf_preview_key') == preview_key:
-            try:
-                raw_key = metadata.get('storage', {}).get('raw_s3_key')
-                if not raw_key:
-                    base = selected.key.rsplit('/vector-store/', 1)[0]
-                    source = metadata.get('source_file')
-                    if not source or '/vector-store/' not in selected.key:
-                        raise ValueError('The original PDF location is missing. Re-upload and reindex this report.')
-                    raw_key = base + '/raw/' + PurePosixPath(source).name
-                with st.spinner('Opening the cited PDF page…'):
-                    pdf_bytes = load_pdf(S3_BUCKET, AWS_REGION, S3_PREFIX, raw_key)
-                    boxes = [active['bbox']] if active.get('bbox') else []
-                    png = render_evidence_page(pdf_bytes, int(active['page_number']), boxes, active.get('pdf_sha256'))
-                st.image(png, width='stretch')
-                st.caption('Highlighted area is the retrieved source block, not a verification of the generated answer.'
-                           if boxes else 'This older index has no highlight coordinates.')
-                if not active.get('pdf_sha256'):
-                    st.warning('Legacy source: PDF identity cannot be verified. Reprocess and rebuild before relying on it.')
-                st.download_button('Download original report', pdf_bytes,
-                                   file_name=PurePosixPath(active.get('source_file', 'report.pdf')).name,
-                                   mime='application/pdf')
-            except StorageError:
-                st.warning('The original PDF is unavailable. Check its S3 location/access or upload it again. Text evidence remains available.')
-            except (ValueError, RuntimeError, OSError) as error:
-                st.warning(str(error))
-        st.caption('For complex tables or columns, use the original page. Text extraction does not reconstruct table cells.')
-
-st.caption('Research aid, not verified financial advice. Citation/number checks do not establish that a claim is supported.')
+st.caption('Research aid—not financial advice. Verify important figures against the linked report or website.')
