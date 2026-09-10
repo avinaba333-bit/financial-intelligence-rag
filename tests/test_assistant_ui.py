@@ -39,6 +39,23 @@ def fake_reports(monkeypatch):
     monkeypatch.setattr(S3Storage, 'download_json', lambda self, key: metadata)
     monkeypatch.setattr(S3Storage, 'download_bytes', lambda self, key: pdf if key.endswith('.pdf') else faiss.serialize_index(index).tobytes())
 
+    import backend.web_research_service as web
+    monkeypatch.setattr(
+        web,
+        'search_current_web',
+        lambda *args, **kwargs: web.WebResearchResult(
+            query='Example Bank current information',
+            answer='The latest sourced company information is available. [W1]',
+            sources=(web.WebSource(
+                evidence_id='W1', title='Investor update',
+                url='https://example.com/investor-update',
+                summary='The latest sourced company information is available.',
+                domain='example.com', published='2026-09-10',
+            ),),
+            searched_at='2026-09-10T00:00:00+00:00',
+        ),
+    )
+
     class FakeEmbedding:
         def encode(self, *args, **kwargs):
             return np.array([[1, 0, 0]], dtype=np.float32)
@@ -121,9 +138,7 @@ def test_future_question_keeps_report_and_web_answers_separate(fake_reports, mon
 
     assert not at.exception
     response = at.session_state['messages'][-1]
-    assert response['content'].startswith(
-        'The selected report evidence is insufficient to answer this question.'
-    )
+    assert response['content'].startswith('The 2025-26 uploaded report')
     assert response['research_plan']['document_out_of_period']
     assert response['web_research']['sources'][0]['evidence_id'] == 'W1'
     assert all(source['evidence_id'].startswith('E') for source in response['evidence'])
@@ -131,6 +146,13 @@ def test_future_question_keeps_report_and_web_answers_separate(fake_reports, mon
     assert 'Uploaded report evidence answer' in rendered
     assert 'Current web research answer' in rendered
     assert '[W1]' in rendered
+
+
+def test_selected_company_appears_in_suggested_questions(fake_reports):
+    at = AppTest.from_file(str(ROOT / 'pages/5_ai_assistant.py'), default_timeout=15).run()
+    labels = [item.label for item in at.button]
+    assert "Where is Example Bank investing for future growth?" in labels
+    assert "How could Example Bank grow over the next three years?" in labels
 
 
 def test_landing_page_has_working_navigation():

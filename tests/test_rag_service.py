@@ -76,8 +76,11 @@ def test_empty_evidence_never_loads_models():
 def test_rejected_answer_is_not_shown_as_fact():
     answer = _checked('Profit was 9999. [E1]', evidence(), evidence())
     assert '9999' not in answer
-    assert 'strongest matching statements' in answer
-    assert 'Profit was Rs 1,250 crore. [E1]' in answer
+    assert answer == 'Profit was Rs 1,250 crore. [E1]'
+
+
+def test_citation_without_an_answer_is_rejected():
+    assert not validate_answer('[E1]', evidence())
 
 
 def test_extractive_fallback_selects_relevant_exact_sentences_with_citations():

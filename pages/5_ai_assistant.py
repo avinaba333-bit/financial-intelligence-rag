@@ -14,6 +14,7 @@ from backend.rag_service import (INSUFFICIENT, GenerationError,
                                  source_excerpt_answer)
 from backend.research_planning_service import (
     WEB_AUTO,
+    WEB_ALWAYS,
     WEB_MODES,
     WEB_OFF,
     document_scope_answer,
@@ -102,7 +103,7 @@ with st.sidebar:
     web_mode = st.selectbox(
         'Current web research',
         available_web_modes,
-        index=available_web_modes.index(WEB_AUTO) if WEB_AUTO in available_web_modes else 0,
+        index=available_web_modes.index(WEB_ALWAYS) if WEB_ALWAYS in available_web_modes else 0,
         help=(
             'Automatic mode adds a separate live-web section only for current, '
             'future, investment, plan, outlook, or post-report-year questions.'
@@ -149,7 +150,7 @@ st.caption('Citations use physical PDF pages; printed page labels may differ. Al
 
 
 def show_sources(results, message_number):
-    with st.expander(f'Source evidence · {len(results)} blocks', expanded=True):
+    with st.expander(f'Source evidence · {len(results)} blocks', expanded=False):
         if not results:
             st.info('No source evidence was retrieved for this question.')
             return
@@ -287,7 +288,7 @@ def show_web_research(web_research, web_error=None):
     if not sources:
         return
 
-    with st.expander(f'Web sources · {len(sources)} links', expanded=True):
+    with st.expander(f'Web sources · {len(sources)} links', expanded=False):
         for source in sources:
             st.markdown(f"**{source.get('evidence_id', 'W?')}**")
             st.write(source.get('title') or source.get('domain') or 'Web source')
@@ -336,9 +337,15 @@ with conversation:
     suggested = None
     if not st.session_state.messages:
         st.write('Or start with one of these suggested questions:')
-        for sample in ['What does the report say about net profit?',
-                       'Which business segments are discussed?',
-                       'What are the main risks described?']:
+        company_name = metadata.get('company') or 'the company'
+        report_year = metadata.get('financial_year') or 'the report year'
+        samples = [
+            f'What was {company_name}\'s net profit in FY {report_year}?',
+            f'Where is {company_name} investing for future growth?',
+            f'How could {company_name} grow over the next three years?',
+            f'What are {company_name}\'s biggest future opportunities and risks?',
+        ]
+        for sample in samples:
             if st.button(sample, key=sample, width='stretch'):
                 suggested = sample
     for n, message in enumerate(st.session_state.messages):

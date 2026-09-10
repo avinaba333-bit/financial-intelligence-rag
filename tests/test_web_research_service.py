@@ -45,6 +45,7 @@ def test_web_search_is_source_linked_deduplicated_and_separate():
     assert 'Rs 500 crore' in result.answer
     assert '[W1]' in result.answer
     assert '[E1]' not in result.answer
+    assert '\n' not in result.answer
     assert result.searched_at == '2026-09-05T12:00:00+00:00'
 
 

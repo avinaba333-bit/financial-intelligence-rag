@@ -38,9 +38,9 @@ def test_future_year_routes_to_web_and_blocks_document_forecast():
     assert plan.report_end_year == 2026
 
     answer = document_scope_answer(plan, '2025-26', INSUFFICIENT)
-    assert answer.startswith(INSUFFICIENT)
+    assert answer.startswith('The 2025-26 uploaded report')
     assert '2028' in answer and '2029' in answer
-    assert 'No future result or forecast has been inferred' in answer
+    assert 'current web answer' in answer
 
 
 @pytest.mark.parametrize(

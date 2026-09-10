@@ -191,19 +191,32 @@ def _normalise_sources(
     )
 
 
-def _extractive_answer(sources: tuple[WebSource, ...]) -> str:
+def _extractive_answer(sources: tuple[WebSource, ...], question: str) -> str:
     if not sources:
         return (
             "No relevant current web source was found. No future financial "
             "result has been estimated."
         )
-    lines = [
-        "Current web search returned these source extracts. They may describe "
-        "plans, investments, targets, or outlook, but they are not audited "
-        "future results and no missing figure has been estimated."
-    ]
-    lines.extend(f"{source.summary} [{source.evidence_id}]" for source in sources[:3])
-    return "\n\n".join(lines)
+    stop_words = {
+        "about", "and", "are", "could", "does", "for", "from", "how", "in",
+        "is", "of", "the", "to", "what", "where", "will", "year", "years",
+    }
+    terms = {
+        term for term in re.findall(r"[a-z0-9]+", question.lower())
+        if len(term) > 2 and term not in stop_words
+    }
+    candidates = []
+    for source_position, source in enumerate(sources):
+        sentences = re.split(r"(?<=[.!?])\s+", source.summary)
+        for sentence_position, sentence in enumerate(sentences):
+            sentence = _clean_text(sentence, 360)
+            if not sentence:
+                continue
+            words = set(re.findall(r"[a-z0-9]+", sentence.lower()))
+            score = len(terms & words) * 5 - source_position - sentence_position
+            candidates.append((score, sentence, source.evidence_id))
+    _, sentence, evidence_id = max(candidates, key=lambda item: item[0])
+    return f"{sentence} [{evidence_id}]"
 
 
 def search_current_web(
@@ -242,7 +255,7 @@ def search_current_web(
     sources = _normalise_sources(raw_results, company, max_results)
     return WebResearchResult(
         query=queries[0],
-        answer=_extractive_answer(sources),
+        answer=_extractive_answer(sources, question),
         sources=sources,
         searched_at=searched.astimezone(timezone.utc).isoformat(timespec="seconds"),
     )

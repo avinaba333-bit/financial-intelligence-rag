@@ -118,8 +118,6 @@ def document_scope_answer(
     requested = ", ".join(str(year) for year in plan.requested_years)
     coverage = financial_year or "the stated reporting period"
     return (
-        f"{insufficient_message}\n\n"
-        f"The question requests {requested}, which is later than the selected "
-        f"report coverage ({coverage}). No future result or forecast has been "
-        "inferred from the uploaded document."
+        f"The {coverage} uploaded report does not contain verified results for "
+        f"{requested}; see the current web answer for sourced outlook information."
     )
