@@ -37,8 +37,8 @@ def apply_style():
     }
     [data-testid="stHeader"] {background: transparent;}
     .block-container {
-      width: min(100%, 1180px);
-      max-width: 1180px;
+      width: 100%;
+      max-width: 1760px;
       padding: clamp(1rem, 2.2vw, 2.15rem) clamp(1rem, 2.8vw, 2.5rem) 4rem;
     }
     h1, h2, h3 {letter-spacing: -.035em;}
