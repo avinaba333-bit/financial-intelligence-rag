@@ -110,39 +110,39 @@ def apply_style():
       letter-spacing: .14em;
     }
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {gap: .82rem;}
-    /* The default navigation uses filename labels and changes markup between
-       Streamlit versions. FinSight renders stable page links below instead. */
-    [data-testid="stSidebarNav"] {display: none !important;}
-    .finsight-nav-group {
-      margin: .95rem 0 .28rem;
-      color: color-mix(in srgb, var(--text-color) 55%, transparent);
-      font-size: .68rem;
-      font-weight: 850;
-      letter-spacing: .13em;
-      text-transform: uppercase;
-    }
-    [data-testid="stSidebar"] [data-testid="stPageLink"] {margin-bottom: .2rem;}
-    [data-testid="stSidebar"] [data-testid="stPageLink"] a {
+    [data-testid="stSidebarNav"] {display: block !important;}
+    [data-testid="stSidebarNav"] ul {gap: .24rem;}
+    [data-testid="stSidebarNav"] li {margin-bottom: .2rem;}
+    [data-testid="stSidebarNav"] a {
       min-height: 2.7rem;
       padding: .58rem .72rem !important;
       border: 1px solid transparent;
       border-radius: 11px;
       transition: background .16s ease, border-color .16s ease, transform .16s ease;
     }
-    [data-testid="stSidebar"] [data-testid="stPageLink"] a:hover {
+    [data-testid="stSidebarNav"] a:hover {
       border-color: var(--finsight-line);
       background: var(--finsight-soft);
       transform: translateX(3px);
     }
-    [data-testid="stSidebar"] [data-testid="stPageLink"] p {
+    [data-testid="stSidebarNav"] a p,
+    [data-testid="stSidebarNav"] a span:not([data-testid="stIconMaterial"]) {
       font-size: .94rem !important;
       font-weight: 720 !important;
       letter-spacing: .006em !important;
       line-height: 1.25 !important;
     }
-    [data-testid="stSidebar"] [data-testid="stPageLink"] [data-testid="stIconMaterial"] {
+    [data-testid="stSidebarNav"] a [data-testid="stIconMaterial"] {
       color: var(--finsight-mint) !important;
       font-size: 1.28rem !important;
+    }
+    [data-testid="stSidebarNav"] [data-testid="stNavSectionHeader"],
+    [data-testid="stSidebarNav"] header {
+      color: color-mix(in srgb, var(--text-color) 55%, transparent) !important;
+      font-size: .68rem !important;
+      font-weight: 850 !important;
+      letter-spacing: .13em !important;
+      text-transform: uppercase;
     }
     [data-testid="stSidebar"] label p,
     [data-testid="stSidebar"] button p {

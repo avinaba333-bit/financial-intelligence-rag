@@ -90,22 +90,4 @@ pages = {
 }
 
 navigation = st.navigation(pages, position='sidebar', expanded=True)
-
-
-def sidebar_navigation():
-    """Render stable branded navigation instead of filename-derived labels."""
-    with st.sidebar:
-        st.markdown('<div class="finsight-nav-group">Overview</div>', unsafe_allow_html=True)
-        st.page_link(home, label='Home', icon=':material/home:')
-        st.markdown('<div class="finsight-nav-group">Document workspace</div>', unsafe_allow_html=True)
-        st.page_link(upload, label='Upload reports', icon=':material/upload_file:')
-        st.page_link(summary, label='Document summary', icon=':material/description:')
-        st.page_link(chunks, label='Chunk viewer', icon=':material/view_cozy:')
-        st.page_link(vectors, label='Vector index', icon=':material/hub:')
-        st.markdown('<div class="finsight-nav-group">Financial research</div>', unsafe_allow_html=True)
-        st.page_link(assistant, label='AI assistant', icon=':material/auto_awesome:')
-        st.page_link(evaluation, label='RAG evaluation', icon=':material/monitoring:')
-
-
-sidebar_navigation()
 navigation.run()
