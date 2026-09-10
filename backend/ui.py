@@ -329,6 +329,57 @@ def apply_style():
       font-size: .67rem;
       font-weight: 700;
     }
+    .finsight-lab-steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .55rem;
+      margin: 1.25rem 0;
+    }
+    .finsight-lab-steps span {
+      padding: .7rem .8rem;
+      border: 1px solid var(--finsight-line);
+      border-radius: 999px;
+      color: color-mix(in srgb, var(--text-color) 70%, transparent);
+      font-size: .74rem;
+      font-weight: 750;
+      text-align: center;
+    }
+    .finsight-lab-steps span.active {
+      color: #061713;
+      border-color: transparent;
+      background: linear-gradient(110deg, var(--finsight-mint), #a0efda);
+    }
+    .finsight-lab-empty {
+      margin-top: 1.6rem;
+      padding: 3rem 1.5rem;
+      border: 1px dashed var(--finsight-line);
+      border-radius: 24px;
+      background: radial-gradient(circle at 50% 20%, rgba(73,216,180,.11), transparent 18rem);
+      text-align: center;
+    }
+    .finsight-lab-empty h3 {margin: 1.1rem 0 .3rem;}
+    .finsight-lab-empty p {margin: 0 auto; max-width: 610px; opacity: .7;}
+    .finsight-lab-orbit {display: flex; align-items: center; justify-content: center; gap: .9rem;}
+    .finsight-lab-orbit b {
+      display: grid; place-items: center; width: 3.2rem; height: 3.2rem;
+      border: 1px solid var(--finsight-line); border-radius: 50%;
+      background: var(--finsight-soft); color: var(--finsight-mint); font-size: 1.1rem;
+    }
+    .finsight-lab-orbit span {color: var(--finsight-gold); font-size: 1.25rem;}
+    .finsight-quality-score {
+      min-height: 170px;
+      padding: 1.25rem;
+      border: 1px solid rgba(73,216,180,.34);
+      border-radius: 22px;
+      background: linear-gradient(145deg, rgba(73,216,180,.16), rgba(241,185,79,.08));
+      box-shadow: var(--finsight-shadow);
+    }
+    .finsight-quality-score span, .finsight-quality-score small {display: block; opacity: .72;}
+    .finsight-quality-score strong {font-size: 4rem; line-height: 1; color: var(--finsight-mint);}
+    .finsight-quality-score b {display: block; margin: .3rem 0 .8rem; color: var(--finsight-gold);}
+    @media (max-width: 760px) {
+      .finsight-lab-steps {grid-template-columns: 1fr 1fr;}
+    }
     @media (max-width: 900px) {
       .block-container {padding: 1rem 1rem 2.5rem;}
       [data-testid="stHorizontalBlock"] {gap: .8rem;}
