@@ -73,12 +73,23 @@ The project does not attempt to reproduce the paper’s original Wikipedia-scale
 ### 4. Evidence-grounded assistant
 
 - Ask a manual question or use suggested financial questions.
-- Search one selected report independently for every question.
+- Search one report or a user-selected set of up to five indexed reports for every question.
 - Generate an answer locally with FLAN-T5 or use configured Bedrock Converse access.
 - Require cited page references and check generated numbers against cited evidence.
 - Fall back to labelled source excerpts when generation fails or guardrail checks reject a draft.
 - Select one evidence page at a time instead of showing multiple long passages together.
 - Open and highlight the selected source block on the original PDF page.
+
+### 4A. Multi-report retrieval and comparison
+
+- Select one or several annual-report indexes from the assistant sidebar.
+- Run dense and BM25 retrieval independently inside every selected report so document provenance is never lost.
+- Merge per-report rankings with a source-balanced policy that retains at least one relevant candidate from each report when space permits.
+- Assign one global `E1…En` citation namespace after merging the selected reports.
+- Label comparison fallbacks with company and financial year instead of mixing figures into an unattributed answer.
+- Route each evidence button to the matching original PDF, physical page, highlighted source block, and complete supporting paragraph.
+
+Detailed specification: [Multi-report assistant requirement](docs/multi_report_assistant_requirement.md).
 
 ### 5. Financial visualization
 
@@ -137,10 +148,11 @@ flowchart TD
     P --> C[Source-linked chunks]
     C --> D[MiniLM dense embeddings]
     C --> K[BM25 keyword index]
-    D --> F[FAISS vector index]
-    F --> R[Reciprocal-rank fusion]
+    D --> F[Per-report FAISS indexes]
+    F --> R[Per-report hybrid retrieval]
     K --> R
-    R --> X[Optional CrossEncoder reranker]
+    R --> M[Source-balanced multi-report merge]
+    M --> X[Optional CrossEncoder reranker]
     X --> G[FLAN-T5 or optional Bedrock generation]
     G --> V[E-citation and number checks]
     V --> O[Uploaded-report answer and PDF page]
@@ -315,6 +327,7 @@ The automated suite uses synthetic PDFs, real FAISS serialization, mocked model/
 - Semantic and keyword fusion and deduplication.
 - Citation and numeric guardrails.
 - Future-year routing, deterministic out-of-period refusal, and source namespace isolation.
+- Multi-report selection, source-balanced result merging, and source-specific PDF routing.
 - Web result URL validation, deduplication, ranking, and provider-failure isolation.
 - Model-failure source fallback.
 - PDF fingerprint validation and highlighted source preview.
@@ -333,10 +346,10 @@ Automated tests do not establish financial answer accuracy. Final acceptance req
 - FLAN-T5-small has limited context length and financial reasoning ability.
 - Complex tables and multi-column layouts must be verified against the original PDF page.
 - OCR is not implemented; scanned pages may contain no searchable text.
-- The assistant currently searches one selected report at a time.
+- The assistant loads at most five reports per question to bound memory use on the current EC2 instance.
+- Cross-report answers quote reported evidence; they do not yet calculate normalized ratios across differing currencies, units, accounting scopes, or reporting periods.
 - Live web answers are source extracts, not audited facts; upstream search availability and ranking can change.
 - A current plan or management target does not establish a future realised net-profit figure.
-- Cross-company and cross-report comparison are not yet implemented.
 - The visualization layer only plots explicitly labelled, compatible evidence values and may correctly return no chart.
 - Questions are searched independently; repeat the company, year, and metric in follow-up questions.
 - The first local query may be slower while models load; later retrieval requests use cached resources.
@@ -363,7 +376,7 @@ Feature work should be committed and tested on a branch before being merged into
 
 - Validated KPI and financial-ratio calculation layer.
 - Structured table extraction with row, column, unit, and footnote awareness.
-- Multi-report, multi-company, and multi-year comparison.
+- Structured cross-report calculations with explicit currency, unit, scope, and period normalization.
 - OCR support for scanned annual reports.
 - Stronger generation and reranking models when infrastructure permits.
 - HTTPS, authentication, authorization, and user-level report isolation.

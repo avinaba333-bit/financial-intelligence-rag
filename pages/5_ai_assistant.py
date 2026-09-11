@@ -8,6 +8,7 @@ from backend.financial_visualization_service import (
     extract_financial_data,
     visualization_rows,
 )
+from backend.multi_document_service import merge_report_results, selected_report_scope
 from backend.pdf_processor import render_evidence_page
 from backend.rag_service import (INSUFFICIENT, GenerationError,
                                  generate_grounded_answer, generate_local_answer,
@@ -22,7 +23,8 @@ from backend.research_planning_service import (
 )
 from backend.retrieval_service import KeywordIndex, fuse_results, rerank_results
 from backend.storage_service import S3Storage, StorageError
-from backend.ui import apply_style, hero, readable_report_label, sidebar_report_card
+from backend.ui import (apply_style, hero, readable_report_label,
+                        show_excerpt, sidebar_report_card)
 from backend.web_research_service import WebResearchError, search_current_web
 from config import (
     AWS_REGION,
@@ -47,7 +49,7 @@ if not S3_BUCKET:
     st.stop()
 
 
-@st.cache_resource(show_spinner=False, ttl=300, max_entries=3)
+@st.cache_resource(show_spinner=False, ttl=300, max_entries=12)
 def load_vector_store(bucket, region, prefix, metadata_key):
     storage = S3Storage(bucket, region, prefix)
     metadata = storage.download_json(metadata_key)
@@ -59,12 +61,23 @@ def load_vector_store(bucket, region, prefix, metadata_key):
     chunks = metadata.get('chunks', [])
     if index.ntotal != len(chunks):
         raise ValueError('Index and chunk counts differ. Rebuild the vector index.')
-    chunks = [dict(chunk, company=metadata.get('company'),
-                   financial_year=metadata.get('financial_year')) for chunk in chunks]
+    raw_pdf_key = metadata.get('storage', {}).get('raw_s3_key')
+    chunks = [
+        dict(
+            chunk,
+            company=chunk.get('company') or metadata.get('company'),
+            financial_year=chunk.get('financial_year') or metadata.get('financial_year'),
+            source_file=chunk.get('source_file') or metadata.get('source_file'),
+            document_id=chunk.get('document_id') or metadata.get('document_id'),
+            vector_metadata_key=metadata_key,
+            raw_s3_key=raw_pdf_key,
+        )
+        for chunk in chunks
+    ]
     return index, chunks, metadata, KeywordIndex(chunks)
 
 
-@st.cache_data(show_spinner=False, ttl=300, max_entries=3)
+@st.cache_data(show_spinner=False, ttl=300, max_entries=12)
 def load_pdf(bucket, region, prefix, raw_key):
     return S3Storage(bucket, region, prefix).download_bytes(raw_key)
 
@@ -96,7 +109,17 @@ with st.sidebar:
         st.info('Build a vector index first.')
         st.page_link('pages/4_vector_index.py', label='Build index')
         st.stop()
-    selected = st.selectbox('Annual report', reports, format_func=readable_report_label)
+    selected_reports = st.multiselect(
+        'Annual reports',
+        reports,
+        default=reports[:1],
+        format_func=readable_report_label,
+        max_selections=5,
+        help='Select one report for focused Q&A or several reports for company/year comparisons.',
+    )
+    if not selected_reports:
+        st.info('Select at least one indexed annual report.')
+        st.stop()
     mode = st.radio('Answer mode', ['AI answer', 'Source excerpts'],
                     help='AI drafts receive citation and number checks, not full factual verification.')
     available_web_modes = list(WEB_MODES) if WEB_SEARCH_ENABLED else [WEB_OFF]
@@ -123,49 +146,95 @@ with st.sidebar:
     st.caption('Model: ' + (CHAT_MODEL_ID or LOCAL_CHAT_MODEL_ID))
     st.caption('Each question is searched independently. Include the year and metric in follow-ups.')
 
-if st.session_state.get('selected_vector_key') != selected.key:
-    st.session_state.selected_vector_key = selected.key
+selected_vector_keys = tuple(report.key for report in selected_reports)
+if st.session_state.get('selected_vector_keys') != selected_vector_keys:
+    st.session_state.selected_vector_keys = selected_vector_keys
     clear_chat()
 st.session_state.setdefault('messages', [])
 
 try:
-    index, chunks, metadata, keyword_index = load_vector_store(S3_BUCKET, AWS_REGION, S3_PREFIX, selected.key)
+    loaded_reports = []
+    for report in selected_reports:
+        index, chunks, metadata, keyword_index = load_vector_store(
+            S3_BUCKET, AWS_REGION, S3_PREFIX, report.key
+        )
+        loaded_reports.append({
+            'document': report,
+            'index': index,
+            'chunks': chunks,
+            'metadata': metadata,
+            'keyword_index': keyword_index,
+        })
 except (StorageError, ValueError, RuntimeError):
-    st.error('Unable to load this index. Check storage access and rebuild if its metadata is incompatible.')
+    st.error('Unable to load one of the selected indexes. Check storage access and rebuild incompatible reports.')
     st.stop()
 
-identity = (selected.key, metadata.get('document_id'), index.ntotal, metadata.get('schema_version'))
+identity = tuple(
+    (
+        item['document'].key,
+        item['metadata'].get('document_id'),
+        item['index'].ntotal,
+        item['metadata'].get('schema_version'),
+    )
+    for item in loaded_reports
+)
 if st.session_state.get('loaded_report_identity') != identity:
     clear_chat()
     st.session_state.loaded_report_identity = identity
 
-page_count = len({chunk.get('page_number') for chunk in chunks if chunk.get('page_number')})
-sidebar_report_card(
-    metadata.get('company'),
-    metadata.get('financial_year'),
-    metadata.get('source_file'),
-    page_count,
-    index.ntotal,
-)
+metadata_items = [item['metadata'] for item in loaded_reports]
+companies, financial_years = selected_report_scope(metadata_items)
+company_scope = ' and '.join(companies) or 'selected companies'
+year_scope = ' / '.join(financial_years)
+total_passages = sum(item['index'].ntotal for item in loaded_reports)
+
+if len(loaded_reports) == 1:
+    active_report = loaded_reports[0]
+    page_count = len({
+        chunk.get('page_number') for chunk in active_report['chunks']
+        if chunk.get('page_number')
+    })
+    sidebar_report_card(
+        active_report['metadata'].get('company'),
+        active_report['metadata'].get('financial_year'),
+        active_report['metadata'].get('source_file'),
+        page_count,
+        active_report['index'].ntotal,
+    )
+else:
+    st.sidebar.markdown('#### Selected report set')
+    for item in loaded_reports:
+        report_metadata = item['metadata']
+        st.sidebar.caption(
+            f"✓ {report_metadata.get('company') or 'Unknown company'} · "
+            f"FY {report_metadata.get('financial_year') or 'unknown'} · "
+            f"{item['index'].ntotal} passages"
+        )
 
 c1, c2, c3 = st.columns(3)
-c1.metric('Company', metadata.get('company') or 'Not specified')
-c2.metric('Financial year', metadata.get('financial_year') or 'Not specified')
-c3.metric('Searchable passages', index.ntotal)
-if metadata.get('schema_version', 1) < 2:
+c1.metric('Selected reports', len(loaded_reports))
+c2.metric('Companies', len(companies) or '—')
+c3.metric('Searchable passages', total_passages)
+if companies or financial_years:
+    st.caption(
+        f"Research scope: {', '.join(companies) or 'company not specified'} · "
+        f"FY {', '.join(financial_years) or 'not specified'}"
+    )
+if any(item['metadata'].get('schema_version', 1) < 2 for item in loaded_reports):
     st.warning('Legacy index: excerpts may end mid-paragraph. Reprocess the PDF, regenerate chunks, '
                'and rebuild the index for complete source blocks and highlighting.')
 st.caption('Citations use physical PDF pages; printed page labels may differ. Always verify figures against the original page.')
 
 
-def _raw_pdf_key():
-    raw_key = metadata.get('storage', {}).get('raw_s3_key')
+def _raw_pdf_key(evidence):
+    raw_key = evidence.get('raw_s3_key')
     if raw_key:
         return raw_key
-    base = selected.key.rsplit('/vector-store/', 1)[0]
-    source = metadata.get('source_file')
-    if not source or '/vector-store/' not in selected.key:
+    metadata_key = evidence.get('vector_metadata_key', '')
+    source = evidence.get('source_file')
+    if not source or '/vector-store/' not in metadata_key:
         raise ValueError('The original PDF location is missing. Re-upload and reindex this report.')
+    base = metadata_key.rsplit('/vector-store/', 1)[0]
     return base + '/raw/' + PurePosixPath(source).name
 
 
@@ -188,8 +257,9 @@ def show_sources(results, message_number):
     for position, result in enumerate(results):
         evidence_id = result['evidence_id']
         page = result.get('page_number', '?')
+        company = result.get('company') or 'Report'
         if source_columns[position % len(source_columns)].button(
-            f'{evidence_id} · Page {page}',
+            f'{evidence_id} · {company} · p.{page}',
             key=f'pick-source-{message_number}-{evidence_id}',
             type='primary' if st.session_state[selector_key] == evidence_id else 'secondary',
             width='stretch',
@@ -200,15 +270,27 @@ def show_sources(results, message_number):
                   if result['evidence_id'] == st.session_state[selector_key])
     try:
         with st.spinner('Opening cited PDF page…'):
-            pdf_bytes = load_pdf(S3_BUCKET, AWS_REGION, S3_PREFIX, _raw_pdf_key())
+            pdf_bytes = load_pdf(S3_BUCKET, AWS_REGION, S3_PREFIX, _raw_pdf_key(active))
             boxes = [active['bbox']] if active.get('bbox') else []
             png = render_evidence_page(
                 pdf_bytes, int(active['page_number']), boxes, active.get('pdf_sha256')
             )
         st.image(
             png,
-            caption=f"{active.get('source_file', 'Report')} · PDF page {active.get('page_number')}",
+            caption=(
+                f"{active.get('company') or 'Company not specified'} · "
+                f"FY {active.get('financial_year') or 'not specified'} · "
+                f"{active.get('source_file', 'Report')} · PDF page {active.get('page_number')}"
+            ),
             width='stretch',
+        )
+        score = active.get('rerank_score', active.get('retrieval_score'))
+        if score is not None:
+            st.caption(f'Relevance ranking score: {float(score):.4f} · use for ordering, not factual confidence.')
+        st.markdown('**Complete supporting paragraph**')
+        show_excerpt(
+            active.get('context_text', active.get('paragraph_text', active.get('text', ''))),
+            active.get('text', ''),
         )
     except StorageError:
         st.warning('The original PDF is unavailable. Check its S3 location or upload it again.')
@@ -312,23 +394,35 @@ def show_message(message, position):
 
 conversation = st.container()
 with conversation:
-    st.subheader('Ask about this company')
+    st.subheader(
+        'Ask across selected reports' if len(loaded_reports) > 1
+        else 'Ask about this company'
+    )
     question = st.chat_input(
-        'Ask a report, growth, investment or future outlook question…',
+        'Ask a report comparison, growth, investment or future outlook question…',
         key='manual-report-question',
     )
 
     suggested = None
     if not st.session_state.messages:
         st.write('Or start with one of these suggested questions:')
-        company_name = metadata.get('company') or 'the company'
-        report_year = metadata.get('financial_year') or 'the report year'
-        samples = [
-            f'What was {company_name}\'s net profit in FY {report_year}?',
-            f'Where is {company_name} investing for future growth?',
-            f'How could {company_name} grow over the next three years?',
-            f'What are {company_name}\'s biggest future opportunities and risks?',
-        ]
+        if len(loaded_reports) > 1:
+            samples = [
+                'Compare the reported net profit across the selected reports. Cite every company and year.',
+                'Compare revenue growth across the selected reports using only compatible figures.',
+                'Summarise the main company-specific opportunities and risks in the selected reports.',
+                'Which requested comparison is not supported by enough evidence in these reports?',
+            ]
+        else:
+            active_metadata = loaded_reports[0]['metadata']
+            company_name = active_metadata.get('company') or 'the company'
+            report_year = active_metadata.get('financial_year') or 'the report year'
+            samples = [
+                f'What was {company_name}\'s net profit in FY {report_year}?',
+                f'Where is {company_name} investing for future growth?',
+                f'How could {company_name} grow over the next three years?',
+                f'What are {company_name}\'s biggest future opportunities and risks?',
+            ]
         for sample in samples:
             if st.button(sample, key=sample, width='stretch'):
                 suggested = sample
@@ -354,15 +448,36 @@ with conversation:
             try:
                 research_plan = plan_research(
                     question,
-                    metadata.get('financial_year'),
+                    year_scope or None,
                     web_mode,
                 )
                 with st.spinner('Finding relevant passages…'):
-                    candidates = min(max(top_k * 5, 25), len(chunks))
-                    dense = search_faiss_index(index, chunks, question, max(candidates, 1))
-                    lexical = keyword_index.search(question, candidates)
-                    results = fuse_results(chunks, dense, lexical,
-                                           candidates if use_reranker else top_k, min_similarity)
+                    report_results = []
+                    for item in loaded_reports:
+                        report_chunks = item['chunks']
+                        candidates = min(max(top_k * 5, 25), len(report_chunks))
+                        dense = search_faiss_index(
+                            item['index'], report_chunks, question, max(candidates, 1)
+                        )
+                        lexical = item['keyword_index'].search(question, candidates)
+                        report_results.append(
+                            fuse_results(
+                                report_chunks,
+                                dense,
+                                lexical,
+                                candidates,
+                                min_similarity,
+                            )
+                        )
+
+                    candidate_limit = max(1, min(
+                        max(top_k * 5, 25),
+                        sum(len(results) for results in report_results),
+                    ))
+                    results = merge_report_results(
+                        report_results,
+                        candidate_limit if use_reranker else top_k,
+                    )
                     if use_reranker:
                         try:
                             results = rerank_results(question, results, top_k)
@@ -373,7 +488,7 @@ with conversation:
                 with st.spinner('Preparing an evidence-grounded response…'):
                     scope_answer = document_scope_answer(
                         research_plan,
-                        metadata.get('financial_year'),
+                        year_scope or None,
                         INSUFFICIENT,
                     )
                     if scope_answer:
@@ -395,7 +510,7 @@ with conversation:
                     try:
                         with st.spinner('Searching current web sources separately…'):
                             web_research = search_current_web(
-                                metadata.get('company') or 'selected company',
+                                company_scope,
                                 question,
                                 region=WEB_SEARCH_REGION,
                                 timeout=WEB_SEARCH_TIMEOUT_SECONDS,
