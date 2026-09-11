@@ -21,7 +21,7 @@ import pytest
 from backend.rag_service import (INSUFFICIENT, validate_answer, select_evidence,
                                  generate_grounded_answer, generate_local_answer,
                                  source_excerpt_answer, extractive_grounded_answer,
-                                 _checked)
+                                 comparison_covers_reports, _checked)
 
 
 def evidence():
@@ -131,6 +131,88 @@ def test_extractive_fallback_rejoins_pdf_wrapped_sentence_and_drops_legal_hit():
     )
     assert 'crore from INR 67,347.4 crore in the previous year. [E1]' in answer
     assert 'section 135' not in answer
+
+
+def test_extractive_comparison_keeps_company_year_and_one_citation_per_report():
+    results = [
+        {
+            'evidence_id': 'E1', 'document_id': 'bank-2025',
+            'company': 'Example Bank', 'financial_year': '2025-26',
+            'source_file': 'bank.pdf', 'page_number': 8,
+            'text': 'Net profit was INR 1,250 crore.',
+        },
+        {
+            'evidence_id': 'E2', 'document_id': 'motors-2024',
+            'company': 'Example Motors', 'financial_year': '2024-25',
+            'source_file': 'motors.pdf', 'page_number': 12,
+            'text': 'Net profit was INR 950 crore.',
+        },
+    ]
+
+    answer = extractive_grounded_answer(
+        'Compare net profit across both reports.', results
+    )
+
+    assert '**Example Bank · FY 2025-26:**' in answer
+    assert 'INR 1,250 crore. [E1]' in answer
+    assert '**Example Motors · FY 2024-25:**' in answer
+    assert 'INR 950 crore. [E2]' in answer
+
+
+def test_comparison_rejects_a_draft_that_omits_one_retrieved_report():
+    results = [
+        {
+            'evidence_id': 'E1', 'document_id': 'bank-2025',
+            'company': 'Example Bank', 'financial_year': '2025-26',
+            'source_file': 'bank.pdf', 'page_number': 8,
+            'text': 'Net profit was INR 1,250 crore.',
+        },
+        {
+            'evidence_id': 'E2', 'document_id': 'motors-2024',
+            'company': 'Example Motors', 'financial_year': '2024-25',
+            'source_file': 'motors.pdf', 'page_number': 12,
+            'text': 'Net profit was INR 950 crore.',
+        },
+    ]
+    draft = 'Example Bank net profit was INR 1,250 crore. [E1]'
+
+    assert not comparison_covers_reports(
+        draft, 'Compare net profit across both reports.', results
+    )
+    fallback = _checked(
+        draft, results, results, 'Compare net profit across both reports.'
+    )
+    assert '[E1]' in fallback and '[E2]' in fallback
+
+
+def test_named_two_company_comparison_does_not_force_an_unrequested_third_report():
+    results = [
+        {
+            'evidence_id': 'E1', 'document_id': 'bank', 'company': 'Example Bank',
+            'financial_year': '2025-26', 'source_file': 'bank.pdf',
+            'text': 'Net profit was INR 1,250 crore.',
+        },
+        {
+            'evidence_id': 'E2', 'document_id': 'motors', 'company': 'Example Motors',
+            'financial_year': '2024-25', 'source_file': 'motors.pdf',
+            'text': 'Net profit was INR 950 crore.',
+        },
+        {
+            'evidence_id': 'E3', 'document_id': 'telecom', 'company': 'Example Telecom',
+            'financial_year': '2025-26', 'source_file': 'telecom.pdf',
+            'text': 'Net profit was INR 700 crore.',
+        },
+    ]
+    question = 'Compare Example Bank versus Example Motors net profit.'
+    answer = extractive_grounded_answer(question, results)
+
+    assert '[E1]' in answer and '[E2]' in answer
+    assert '[E3]' not in answer
+    assert comparison_covers_reports(
+        'Bank: INR 1,250 crore. [E1]\nMotors: INR 950 crore. [E2]',
+        question,
+        results,
+    )
 
 
 def test_bedrock_prompt_and_citation_validation(monkeypatch):

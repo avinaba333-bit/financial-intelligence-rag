@@ -29,15 +29,34 @@ def fake_reports(monkeypatch):
                'bbox': [65, 55, 400, 80], 'pdf_sha256': hashlib.sha256(pdf).hexdigest()}]
     index = faiss.IndexFlatIP(3)
     index.add(np.array([[1, 0, 0]], dtype=np.float32))
-    metadata = {'index_s3_key': 'test.faiss', 'schema_version': 2, 'document_id': 'synthetic',
+    metadata = {'index_s3_key': 'test.faiss', 'schema_version': 2, 'document_id': 'synthetic-bank',
                 'company': 'Example Bank', 'financial_year': '2025-26', 'source_file': 'report.pdf',
                 'storage': {'raw_s3_key': 'original.pdf'}, 'chunks': chunks}
+    second_chunks = [{
+        'text': 'Net profit was Rs 950 crore.',
+        'paragraph_text': 'Net profit was Rs 950 crore.\nConsolidated results.',
+        'paragraph_id': 'p1-b1', 'page_number': 1, 'source_file': 'motors.pdf',
+        'bbox': [65, 55, 400, 80], 'pdf_sha256': hashlib.sha256(pdf).hexdigest(),
+    }]
+    second_metadata = {
+        'index_s3_key': 'motors.faiss', 'schema_version': 2,
+        'document_id': 'synthetic-motors', 'company': 'Example Motors',
+        'financial_year': '2024-25', 'source_file': 'motors.pdf',
+        'storage': {'raw_s3_key': 'motors-original.pdf'}, 'chunks': second_chunks,
+    }
     reports = [S3Document('reports/example/2025-26/vector-store/report_metadata.json', 'Example'),
-               S3Document('reports/other/2025-26/vector-store/report_metadata.json', 'Other')]
+               S3Document('reports/other/2024-25/vector-store/motors_metadata.json', 'Other')]
+    metadata_by_key = {reports[0].key: metadata, reports[1].key: second_metadata}
+    downloaded_keys = []
+
+    def download_bytes(_self, key):
+        downloaded_keys.append(key)
+        return pdf if key.endswith('.pdf') else faiss.serialize_index(index).tobytes()
+
     monkeypatch.setattr(S3Storage, '__init__', lambda self, *a, **k: None)
     monkeypatch.setattr(S3Storage, 'list_vector_metadata', lambda self: reports)
-    monkeypatch.setattr(S3Storage, 'download_json', lambda self, key: metadata)
-    monkeypatch.setattr(S3Storage, 'download_bytes', lambda self, key: pdf if key.endswith('.pdf') else faiss.serialize_index(index).tobytes())
+    monkeypatch.setattr(S3Storage, 'download_json', lambda self, key: metadata_by_key[key])
+    monkeypatch.setattr(S3Storage, 'download_bytes', download_bytes)
 
     import backend.web_research_service as web
     monkeypatch.setattr(
@@ -61,7 +80,11 @@ def fake_reports(monkeypatch):
             return np.array([[1, 0, 0]], dtype=np.float32)
 
     monkeypatch.setattr(embeddings, 'get_embedding_model', lambda: FakeEmbedding())
-    yield metadata
+    yield {
+        'metadata': metadata,
+        'reports': reports,
+        'downloaded_keys': downloaded_keys,
+    }
     st.cache_resource.clear()
     st.cache_data.clear()
 
@@ -86,10 +109,10 @@ def test_chat_evidence_pdf_preview_and_report_switch(fake_reports):
     assert not at.exception
     assert len(at.get('image')) == 1
     # On rerun the same source selector must have a stable key and keep history.
-    button(at, 'E1 · Page 1').click().run()
+    button(at, 'E1 · Example Bank · p.1').click().run()
     assert not at.exception
     assert len(at.chat_message) == 2
-    at.selectbox[0].select_index(1).run()
+    at.multiselect[0].set_value([fake_reports['reports'][1]]).run()
     assert not at.exception
     assert at.session_state['messages'] == []
     assert 'active_evidence' not in at.session_state
@@ -159,6 +182,42 @@ def test_selected_company_appears_in_suggested_questions(fake_reports):
     assert 'Active annual report' in rendered
     assert 'Example Bank' in rendered
     assert '1 pages' in rendered
+
+
+def test_multiple_reports_are_retrieved_and_keep_source_specific_pdf_links(fake_reports):
+    at = AppTest.from_file(str(ROOT / 'pages/5_ai_assistant.py'), default_timeout=15).run()
+    at.multiselect[0].set_value(fake_reports['reports']).run()
+    assert not at.exception
+    at.radio[0].set_value('Source excerpts').run()
+    at.chat_input[0].set_value(
+        'Compare net profit across Example Bank and Example Motors.'
+    ).run()
+
+    assert not at.exception
+    response = at.session_state['messages'][-1]
+    assert {item['company'] for item in response['evidence']} == {
+        'Example Bank', 'Example Motors'
+    }
+    assert {item['document_id'] for item in response['evidence']} == {
+        'synthetic-bank', 'synthetic-motors'
+    }
+    assert 'Ask across selected reports' in [item.value for item in at.subheader]
+    assert 'Research scope: Example Bank, Example Motors' in '\n'.join(
+        caption.value for caption in at.caption
+    )
+
+    button(at, 'View PDF evidence').click().run()
+    assert not at.exception
+    labels = [item.label for item in at.button]
+    assert 'E1 · Example Bank · p.1' in labels
+    assert 'E2 · Example Motors · p.1' in labels
+    assert len(at.get('image')) == 1
+    assert 'Complete supporting paragraph' in '\n'.join(
+        markdown.value for markdown in at.markdown
+    )
+    button(at, 'E2 · Example Motors · p.1').click().run()
+    assert not at.exception
+    assert 'motors-original.pdf' in fake_reports['downloaded_keys']
 
 
 def test_landing_page_has_working_navigation():
